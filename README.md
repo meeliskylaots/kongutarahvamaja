@@ -7,11 +7,13 @@ Mobiilisõbralik koduleht, töötajate siseveeb ja ruumide päringuvorm. Avalik 
 - Avaleht, sündmuste päevavaade, ruumide kirjeldused, kollektiivid ja kontakt.
 - Saali ja väliala kasutuse päring. Server kontrollib saadavust ja saadab päringukinnituse.
 - Töötaja sisselogimine sama kasutaja- ja sessioonisüsteemiga nagu Kultuuripesas. Seanss säilib lehe värskendamisel ja lõpeb väljalogimisel.
-- Juhataja/admin näeb päringuid, kinnitab või lükkab need tagasi ning muudab avalehe, ruumide ja kollektiivide teksti, pildilinki ja lisalinki.
+- Juhataja/admin näeb päringuid, kinnitab või lükkab need tagasi ning muudab avalehe ja ruumide infot. Kollektiivide nimekirja saab lisada, muuta ja eemaldada koos proovigraafiku, juhendaja ja kontaktidega.
 - Kollektiivi juhendaja näeb oma kasutusi ja saab esitada prooviajamuudatuse palve.
 - Eraürituste klientide andmeid avalikus kalendris ei näidata.
 
 ## Seadistus
+
+Broneeringute kinnitamine ja prooviajamuudatused kasutavad praegu olemasoleva Apps Scripti töövoogu. Automaatne kinnitamine pärast kalendri ja puhvriaja kontrolli vajab serveripoolset muudatust.
 
 Veeb kasutab praegust Apps Scripti aadressi, mis on faili `index.html` muutujas `API`. Apps Scriptis peab olema kasutusel Kultuuripesa versioon, mis toetab toiminguid `submitSiteBooking`, `daySchedule`, `authChallenge`, `authLogin`, `authSession`, `list`, `updateStatus`, `savePublicContent` ja `requestReschedule`.
 
@@ -23,7 +25,7 @@ Repo töövoog `.github/workflows/pages.yml` ehitab iga `main`-haru muudatuse j�
 
 ## Sisu ja pildid
 
-Töötaja siseveebi sisuhalduses saab lisada HTTPS-pildilingi ning sisuteksti. Pildifailid ei lähe lähtekoodi ega broneeringute tabelisse. Kollektiivide põhiandmed tulevad olemasolevast `Kollektiivid` Google Sheetsi lehest.
+Töötaja siseveebi sisuhalduses saab muuta avalehe teksti ja pilti, ruumide kirjeldusi ning kollektiivide kõiki avalikke välju. Pildid lisatakse HTTPS-lingina. Kodulehe sisu salvestatakse olemasoleva Apps Scripti avaliku sisu tabelisse; koodimuudatusi pole tavaliseks sisuhalduseks vaja.
 
 ## Arendus
 
