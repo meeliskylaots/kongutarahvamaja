@@ -17,7 +17,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="index.html">Konguta Rahvamaja</a>
-    <a class="back" href="index.html">← Tagasi kodulehele</a>
+    <a id="cultureBack" class="back" href="index.html#home">← Tagasi kodulehele</a>
   </header>
   <main class="content">
     <div class="heading">
@@ -29,5 +29,9 @@
     </div>
     <p class="fallback">Kui kultuuriekraan siin ei lae, <a href="https://meeliskylaots.github.io/elvakultuur/" target="_blank" rel="noopener">ava see eraldi vahekaardil</a>.</p>
   </main>
+<script>
+    const from=new URLSearchParams(location.search).get('from');
+    if(['home','events','booking','activities','rooms','contact','login'].includes(from)){const back=document.getElementById('cultureBack');back.href='index.html#'+from;back.textContent='← Tagasi';}
+  </script>
 </body>
 </html>
