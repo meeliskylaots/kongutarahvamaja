@@ -1,6 +1,6 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),crypto=require('crypto');
 const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8'),scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
-const context={console,crypto:crypto.webcrypto,Intl,Date,URLSearchParams,TextEncoder,Uint8Array,document:{getElementById:()=>null}};vm.createContext(context);
+const context={console,crypto:crypto.webcrypto,Intl,Date,URLSearchParams,TextEncoder,Uint8Array,window:{addEventListener(){}},document:{getElementById:()=>null}};vm.createContext(context);
 vm.runInContext(scripts[0],context);vm.runInContext(fs.readFileSync(require('path').join(__dirname,'../konguta-admin.js'),'utf8'),context);
 const run=s=>vm.runInContext(s,context);let n=0;function check(name,fn){fn();n++;console.log('PASS '+name)}
 check('48 weekly Mondays for complete September–July season, same wall-clock dates across DST',()=>{const d=context.kBuildDates('2027-09-01','2028-07-31',1,[],true,'2027-09-01');assert.equal(d.dates.length,48);assert.equal(d.dates[0],'2027-09-06');assert.equal(d.dates.at(-1),'2028-07-31');assert.equal(d.dates.every(d=>context.kIsoWeekday(d)===1),true)});
@@ -10,3 +10,21 @@ check('Text quick entry parses collective, Estonian weekday, times and season',(
 check('Missing times are not invented',()=>{const d=run("kExtractSchedule('Kavalik hooajaks 2026/27',groups,'2026-09-27')");assert.equal(d.endTime,undefined);assert.match(d.question,/lõpuaeg/)});
 check('All new public content elements exist and module loads before startup',()=>{for(const id of ['homeTitle','homeDescription','homeNote','communityTitle','communityDescription','activitiesDescription','contactAddress','contactEmail','contactPhone','bookingConfirmationHint','eventBookingHint'])assert.ok(html.includes('id="'+id+'"'),id);assert.ok(html.indexOf('src="konguta-admin.js')<html.indexOf("$('eventDate').value=etDate();eventCalendarMonth=etDate().slice(0,7);bookingCalendarMonth="))});
 for(const s of scripts)new vm.Script(s);console.log(`${n} frontend checks passed.`);
+
+check('Public event list excludes rehearsals, private bookings and pending events; calendar keeps all uses',()=>{
+ const source=[{type:'Proov',publicEvent:true,publicTitle:'Kooriproov'},{type:'Sündmus',publicEvent:true,publicTitle:'Kontsert'},{type:'broneering',publicEvent:false,publicTitle:'Salajane sünnipäev'},{type:'Sündmus',publicEvent:true,status:'ootel',publicTitle:'Ootel üritus'}].map(x=>({roomId:'konguta-saal',date:'2027-10-01',startTime:'18:00',endTime:'20:00',status:'kinnitatud',...x}));
+ const snapshot=context.publicCalendarUsages(source);assert.equal(snapshot.length,4);assert.equal(context.snapshotDay(snapshot,'2027-10-01').length,4);const events=context.upcomingPublicEvents(snapshot,'2027-09-28');assert.equal(events.length,1);assert.equal(events[0].title,'Kontsert');assert.equal(snapshot[2].title,'Ruum kasutuses');
+});
+check('Mobile menu ends with culture screen and keeps staff access in header',()=>{const nav=html.match(/<nav class="mobile-nav"[\s\S]*?<\/nav>/)[0];assert.ok(nav.indexOf('Huviringid')<nav.indexOf('Kultuuriekraan'));assert.ok(!nav.includes('Töötajale'));assert.ok(html.includes('mobile-staff'));});
+check('Back follows actual internal history and preserves in-memory booking fields',()=>{
+ const listeners={},views=['home','events','booking','activities','rooms','contact','login'];const elements={};
+ for(const id of views.map(v=>'view-'+v).concat(['bookingBack','bookingForm','clientName','clientEmail','bookDate']))elements[id]={classList:{add(){},remove(){},toggle(){}},querySelector:()=>null,value:'',textContent:''};
+ elements.clientName.value='Test Client';elements.clientEmail.value='client@example.test';
+ context.document.getElementById=id=>elements[id]||null;context.document.querySelectorAll=selector=>selector==='.view'?views.map(v=>elements['view-'+v]):[];
+ context.window.scrollTo=()=>{};context.location={hash:'#home'};const stack=[];context.history={state:null,pushState(state,_,hash){stack.push({state:this.state,hash:context.location.hash});this.state=state;context.location.hash=hash;},replaceState(state,_,hash){this.state=state;context.location.hash=hash;},back(){const last=stack.pop();this.state=last.state;context.location.hash=last.hash;context.showView(context.routeView(),true);}};
+ run("loadHomeEvents=()=>{};loadEventSchedule=()=>{};renderRegularActivities=()=>{};loadBookingSchedule=()=>{};loadCollectives=()=>{};renderRooms=()=>{};");
+ context.initNavigation();assert.equal(elements.bookingBack.textContent,'← Avalehele');context.showView('events');context.showView('booking');assert.equal(context.location.hash,'#booking');assert.equal(elements.bookingBack.textContent,'← Tagasi');context.goBookingBack();assert.equal(context.location.hash,'#events');assert.equal(elements.clientName.value,'Test Client');assert.equal(elements.clientEmail.value,'client@example.test');
+ context.showView('booking');context.showView('rooms');context.history.back();assert.equal(context.location.hash,'#booking');assert.equal(elements.clientName.value,'Test Client');
+});
+check('Direct booking link has a safe home fallback',()=>{context.location.hash='#booking';context.history.state=null;context.initNavigation();assert.equal(context.document.getElementById('bookingBack').textContent,'← Avalehele');context.goBookingBack();assert.equal(context.location.hash,'#home');});
+console.log(`${n} total frontend checks passed.`);
