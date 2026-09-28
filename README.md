@@ -1,32 +1,55 @@
 # Konguta Rahvamaja veeb
 
-Mobiilisõbralik koduleht, töötajate siseveeb ja ruumide päringuvorm. Avalik veeb kasutab Konguta Rahvamaja praegust Apps Scripti teenust; broneeringud, kasutajad ja avalik sisu jäävad Google Sheetsi.
+Konguta avalik veeb ja töötajate töölaud. Avalik aadress: https://meeliskylaots.github.io/kongutarahvamaja/
 
-## Mis töötab
+## Haldusuuendus v3
 
-- Avaleht, sündmuste päevavaade, ruumide kirjeldused, kollektiivid ja kontakt.
-- Saali ja väliala kasutuse päring. Server kontrollib saadavust ja saadab päringukinnituse.
-- Töötaja sisselogimine sama kasutaja- ja sessioonisüsteemiga nagu Kultuuripesas. Seanss säilib lehe värskendamisel ja lõpeb väljalogimisel.
-- Juhataja/admin näeb päringuid, kinnitab või lükkab need tagasi ning muudab avalehe ja ruumide infot. Kollektiivide nimekirja saab lisada, muuta ja eemaldada koos proovigraafiku, juhendaja ja kontaktidega.
-- Kollektiivi juhendaja näeb oma kasutusi ja saab esitada prooviajamuudatuse palve.
-- Eraürituste klientide andmeid avalikus kalendris ei näidata.
+- Juhataja ja administraator haldavad Konguta kollektiive, kontode seoseid, sisu, pilte, hinnakirja ja kõiki Konguta kalendrikirjeid.
+- Kollektiivijuht muudab otse ainult oma kontoga seotud kollektiivide infot ja tulevasi proove. Kliendi broneeringud ja teiste kollektiivide haldus jäävad talle suletuks.
+- Klõps kalendripäeval avab lisamise vormi. Kordamine: üks kord, igal nädalal või terve hooaeg 1. septembrist 31. juulini.
+- Hooajast saab välja jätta kuupäevi. Möödunud kuupäevi vaikimisi ei lisata; juhataja saab need teadlikult kaasa võtta.
+- Enne salvestamist kuvatakse kuupäevad, kirjete arv, olemasolevad samad proovid ja konfliktid. Kogu seeria kontrollitakse ning kirjutatakse ühe paketina. Konfliktide korral ei salvestata poolikut graafikut.
+- Meiliteade on sisemistel kalendritoimingutel vaikimisi väljas. Valik „Saada juhatajale üks kokkuvõte meilile” saadab ühe kirja kogu toimingu kohta.
+- Seeria muutmisel ja tühistamisel saab valida ühe korra, selle ja järgnevad korrad või kogu seeria. Tühistatud kirjed säilivad ning taastamine kontrollib saadavust uuesti.
+- Avaliku Konguta broneeringu vaba aeg kinnitatakse automaatselt. Klient saab ühe kinnituskirja; juhatajale rutiinset broneeringukirja ei saadeta. Muude rahvamajade senine töövoog säilib.
+- Kasutuste vahele peab jääma vähemalt 60 minutit. Täpselt 60-minutiline vahe on lubatud; puhvreid ei liideta kaheks tunniks.
+- Muudatuste vaade asendab sisemiste meilide voogu. Klientide kontaktandmeid avalikku kalendrisse ei edastata.
 
-## Seadistus
+## Serveriosa avaldamine on vajalik
 
-Broneeringute kinnitamine ja prooviajamuudatused kasutavad praegu olemasoleva Apps Scripti töövoogu. Automaatne kinnitamine pärast kalendri ja puhvriaja kontrolli vajab serveripoolset muudatust.
+GitHub Pages avaldab ainult veebilehe. Uued õigused, hooajagraafik ja automaatne kinnitamine vajavad ka Apps Scripti v3 juurutust. Veeb kontrollib API versiooni ja kasutab enne seda senist töölauda.
 
-Veeb kasutab praegust Apps Scripti aadressi, mis on faili `index.html` muutujas `API`. Apps Scriptis peab olema kasutusel Kultuuripesa versioon, mis toetab toiminguid `submitSiteBooking`, `daySchedule`, `authChallenge`, `authLogin`, `authSession`, `list`, `updateStatus`, `savePublicContent` ja `requestReschedule`.
+Ettevalmistatud serveri lähtekood (pole veel Google’is juurutatud): [Konguta / google/booking-apps-script.gs](google/booking-apps-script.gs).
 
-Saal ja väliala on seadistatud olemasolevate ruumi ID-dega `konguta-saal` ja `konguta-valiala`. Broneeringute lõplik saadavus ja puhver kontrollitakse serveris.
+**Avaldamise piirang:** praegune API on Kultuuripesaga ühine. Ühise serveri muutmine vajab omaniku selget nõusolekut; Kultuuripesa repo jäi muutmata. Allolevad sammud rakenduvad alles pärast selle ulatuse kinnitamist. Alternatiiv on luua Kongutale eraldi Apps Scripti projekt ja asendada `API` aadress; see vajab eraldi juurutust.
 
-## Avaldamine GitHub Pagesis
+1. Ava Google Apps Scriptis olemasolev projekt, mille veebirakenduse aadress vastab `index.html` muutujale `API`.
+2. Asenda senine broneeringute skript uuendatud failiga. Säilita olemasolev projekt, tabel ja juurutuse ID.
+3. Salvesta ning vali **Deploy → Manage deployments → Edit → Version: New version → Deploy**. Kasuta olemasolevaid juurutuse ligipääsuseadeid.
+4. Kontrolli olemasoleva API aadressi järel `?action=kongutaPublic`: vastuses peab olema `"apiVersion":3`.
+5. Ava koduleht uuesti ja logi sisse. Vaates „Kollektiivid” seo juhendaja konto vastava kollektiiviga. Ära lisa kontrollimiseks päris hooajagraafikut enne, kui õiged ajad on teada.
 
-Repo töövoog `.github/workflows/pages.yml` ehitab iga `main`-haru muudatuse järel Pagesi paketi. GitHubis ava **Settings → Pages** ja vali **Source: GitHub Actions**. Valmis aadress ilmub Pagesi seadetes ja Actionsi töövoo tulemusena.
+Andmed jäävad senisesse Google Sheetsi. V3 lisab avaliku sisu hulka `konguta-site/main` seadistuse, vajadusel `Konguta muudatused` töölehe ning broneeringute tabelisse `Toimingu ID` veeru. Sisu võetakse esimesel lugemisel üle senisest KRM1 kirjest; olemasolevaid kalendrikirjeid ei kustutata.
 
-## Sisu ja pildid
+## Graafiku sisestusabiline
 
-Töötaja siseveebi sisuhalduses saab muuta avalehe teksti ja pilti, ruumide kirjeldusi ning kollektiivide kõiki avalikke välju. Pildid lisatakse HTTPS-lingina. Kodulehe sisu salvestatakse olemasoleva Apps Scripti avaliku sisu tabelisse; koodimuudatusi pole tavaliseks sisuhalduseks vaja.
+„Täida vorm tekstist” tunneb näiteks lause:
 
-## Arendus
+> Kavalik neljapäeviti 19.30–21.30, hooaeg 2026/27. Välja arvatud 24.12.2026, 31.12.2026.
 
-Leht on staatiline `index.html`; eraldi pakette ega ehitust pole vaja. Ava fail lokaalses veebiserveris või kasuta GitHub Pagesi eelvaadet. Apps Scripti POST-päringud kasutavad `no-cors` režiimi ja kinnitavad tulemuse operatsiooni oleku päringuga.
+See töötab kohalikult ega saada teksti välisele AI-teenusele. Puuduvaid kellaaegu ei oletata.
+
+Valikuline päris AI-abiline ilmub, kui Apps Scripti **Project Settings → Script Properties** hulgas on `OPENAI_API_KEY`. Võtit ei tohi lisada GitHubi ega brauseri koodi. `OPENAI_MODEL` on valikuline; vaikemudel on `gpt-4.1-mini`.
+
+AI kasutab Responses API struktureeritud väljundit, `store:false` ja kasutajapõhist päringupiirangut. Teenusele saadetakse kasutaja sisestatud graafikukirjeldus, kuupäev ja talle lubatud kollektiivide nimed/ID-d. Olemasolevaid broneeringuid ega kliendikontakte ei saadeta. AI koostab vormi mustandi, mitte iseseisva kalendritoimingu. AI kasutamine eeldab toimivat API kontot ja selle hinnakirja; võtit ega tasulist teenust uuendus automaatselt ei loo. Lahendus ei treeni iseseisvalt mudelit.
+
+## Arendus ja kontrollid
+
+Staatiline `index.html` ning `konguta-admin.js`; ehitamist ega npm-pakette pole vaja. GitHub Actions avaldab `main` muudatused Pagesi.
+
+- Frontendi kontrollid: `node tests/admin.test.cjs`.
+- Serveri kontrollid asuvad samas Konguta repos: `node google/tests/konguta-admin.test.cjs`.
+- Kontrollid kasutavad mälus näidisandmeid, ei kirjuta päris kalendrisse ega saada päris kirju.
+- POST kasutab operatsiooni ID-d. Tulemuse korduv lugemine ja sama toimingu uuesti saatmine ei lisa topeltgraafikut. Seeria muutmise eelvaate revisjon kaitseb vahepealse muutmise eest.
+
+Automaatkontrollid katavad kordused üle suve-/talveaja vahetuse, erandid, duplikaadid, konfliktid, ühe tunni puhvri, koondkirjade arvu, rollid, privaatsuse, hinnad ja seeria tühistamise/taastamise. Google'i tegelikku juurutust ja valikulist AI-ühendust tuleb kontrollida pärast serveriosa avaldamist.
