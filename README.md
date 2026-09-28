@@ -19,9 +19,9 @@ Konguta avalik veeb ja töötajate töölaud. Avalik aadress: https://meeliskyla
 
 GitHub Pages avaldab ainult veebilehe. Uued õigused, hooajagraafik ja automaatne kinnitamine vajavad ka Apps Scripti v3 juurutust. Veeb kontrollib API versiooni ja kasutab enne seda senist töölauda.
 
-Serveri v3 lähtekood ja testid on ettevalmistatud kohalikus arendustöös. Neid ei avaldatud selles avalikus repos ega juurutatud Google’is. Serveriosa üleandmine ja avaldamine vajavad veel omaniku kinnitust.
+Serveri v3 lähtekood ja testid on ettevalmistatud kohalikus arendustöös. Neid ei avaldatud selles avalikus repos ega juurutatud Google’is. Omanik kinnitas ühise serveri uuendamise 28.09.2026. Google’i juurutus ootab halduskontole ligipääsu.
 
-**Avaldamise piirang:** praegune API on Kultuuripesaga ühine. Ühise serveri muutmine vajab omaniku selget nõusolekut; Kultuuripesa repo jäi muutmata. Allolevad sammud rakenduvad alles pärast selle ulatuse kinnitamist. Alternatiiv on luua Kongutale eraldi Apps Scripti projekt ja asendada `API` aadress; see vajab eraldi juurutust.
+**Avaldamise seis:** praegune API on Kultuuripesaga ühine. Omanik lubas serverit Konguta funktsioonide jaoks uuendada, säilitades Kultuuripesa senise toimimise. Google’i juurutust pole veel tehtud, sest halduse sisselogimine polnud arendusseansist kättesaadav. Kultuuripesa repo jäi muutmata.
 
 1. Ava Google Apps Scriptis olemasolev projekt, mille veebirakenduse aadress vastab `index.html` muutujale `API`.
 2. Asenda senine broneeringute skript uuendatud failiga. Säilita olemasolev projekt, tabel ja juurutuse ID.
