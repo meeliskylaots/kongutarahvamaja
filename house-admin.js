@@ -78,26 +78,33 @@ function kApplyPublic(){
   if($('contactAddress'))$('contactAddress').textContent=t.address;
   if($('contactPhone')){$('contactPhone').textContent=t.phone;$('contactPhone').href='tel:'+t.phone.replace(/[^\d+]/g,'');}
   if($('contactEmail')){$('contactEmail').textContent=t.email;$('contactEmail').href='mailto:'+t.email;}
-  $('submitBookingBtn').textContent='Broneeri ruum';
-  $('bookingConfirmationHint').textContent='Vaba aeg kinnitatakse kohe pärast kalendri ja 60-minutilise puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.';
-  if($('eventBookingHint'))$('eventBookingHint').textContent='Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.';
+  const instant=HOUSE.publicBookingMode==='instant';
+  $('submitBookingBtn').textContent=instant?'Broneeri ruum':'Saada broneeringusoov →';
+  $('bookingConfirmationHint').textContent=instant?'Vaba aeg kinnitatakse kohe pärast kalendri ja puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.':'Päring saadetakse rahvamajale kinnitamiseks. Avalikus kalendris näidatakse menetluses aega neutraalselt, ilma sinu kontaktandmeteta.';
+  if($('eventBookingHint'))$('eventBookingHint').textContent=instant?'Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.':'Vali sobiv aeg ja saada ruumi kasutamise soov. Rahvamaja kinnitab broneeringu eraldi.';
   updateQuote();renderBookingRoomInfo();renderBookingCalendar();
   document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel'))el.textContent=`Valitud ruumi saadavus kell 08.00–23.00 koos puhvriga. Saali vaba vahemik peab olema vähemalt ${kMinimumHours()} tundi.`;});
 }
 getQuote=function(){
   if(!kSite)return kLegacy.getQuote();
-  const p=kSite.prices,community=$('clientType').value==='community',outdoor=kRoomIsUnpriced($('bookRoom').value),start=$('startTime').value,end=$('endTime').value;
-  const valid=!!(start&&end&&min(end)>min(start)),hours=valid?Math.ceil((min(end)-min(start))/60):0,hourly=community?p.community:p.commercial;
+  const p=kSite.prices,community=$('clientType').value==='community',room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom(),start=$('startTime').value,end=$('endTime').value;
+  const configuredHourly=community?room?.pricing?.community:room?.pricing?.commercial;
+  const fallbackHourly=community?p.community:p.commercial;
+  const hourly=Number.isFinite(configuredHourly)?configuredHourly:(room?.id===kPrimaryRoom()?.id?fallbackHourly:null);
+  const outdoor=!Number.isFinite(hourly);
+  const valid=!!(start&&end&&min(end)>min(start)),hours=valid?Math.ceil((min(end)-min(start))/60):0;
   const roomCost=outdoor?0:hours*hourly,selected=[];
   if($('serviceSound').checked)selected.push({label:'Helitehnika',total:p.sound});
   if($('serviceLights').checked)selected.push({label:'Valgustus',total:p.lights});
   if($('serviceTechnician').checked)selected.push({label:'Tehniline tugi',total:Math.max(p.technicianMinimum,hours)*(community?p.technicianCommunity:p.technicianCommercial)});
-  const servicesTotal=selected.reduce((a,x)=>a+x.total,0);return{valid,hours,hourly,community,outdoor,roomCost,selected,servicesTotal,total:roomCost+servicesTotal};
+  const servicesTotal=selected.reduce((a,x)=>a+x.total,0);return{valid,hours,hourly,community,outdoor,room,roomCost,selected,servicesTotal,total:roomCost+servicesTotal};
 };
 updateQuote=function(){
-  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices,q=getQuote();
-  $('communityRateCard').querySelector('strong').textContent=`Kogukonnasõbralik kasutus ${kMoney(p.community)} €/h`;
-  $('commercialRateCard').querySelector('strong').textContent=`Kommertskasutus ${kMoney(p.commercial)} €/h`;
+  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices,q=getQuote(),room=q.room||rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();
+  const communityRate=Number.isFinite(room?.pricing?.community)?room.pricing.community:(room?.id===kPrimaryRoom()?.id?p.community:null);
+  const commercialRate=Number.isFinite(room?.pricing?.commercial)?room.pricing.commercial:(room?.id===kPrimaryRoom()?.id?p.commercial:null);
+  $('communityRateCard').querySelector('strong').textContent=`Kogukonnasõbralik kasutus ${Number.isFinite(communityRate)?kMoney(communityRate)+' €/h':'kokkuleppel'}`;
+  $('commercialRateCard').querySelector('strong').textContent=`Kommertskasutus ${Number.isFinite(commercialRate)?kMoney(commercialRate)+' €/h':'kokkuleppel'}`;
   $('communityRateCard').classList.toggle('selected',q.community);$('commercialRateCard').classList.toggle('selected',!q.community);
   $('serviceSound').closest('label').querySelector('b').textContent=kMoney(p.sound)+' € / üritus';
   $('serviceLights').closest('label').querySelector('b').textContent=kMoney(p.lights)+' € / üritus';
@@ -105,12 +112,20 @@ updateQuote=function(){
   $('quoteBox').innerHTML=`<h3>Hinna arvestus</h3><div class="quote-row"><span>Ruumirent ${q.outdoor?'':`${kMoney(q.hourly)} €/h × ${q.hours} h`}</span><strong>${q.outdoor?'Kokkuleppel':q.valid?euro(q.roomCost):'—'}</strong></div>${q.selected.map(x=>`<div class="quote-row"><span>${esc(x.label)}</span><strong>${euro(x.total)}</strong></div>`).join('')}<div class="quote-row quote-total"><span>Kokku</span><strong>${q.valid?euro(q.total):'—'}</strong></div><p class="quote-note">${q.outdoor?'Väliala rendihind lepitakse eraldi kokku. ':''}Arvestus kehtiva hinnakirja järgi. Arve ja erikokkulepped täpsustab rahvamaja.</p>`;
 };
 renderBookingRoomInfo=function(){
-  kLegacy.renderBookingRoomInfo();if(!kSite||$('bookRoom').value!==kPrimaryRoom()?.id)return;
-  const t=kSite.texts,p=kSite.prices;
-  $('bookingRoomInfo').innerHTML=`<h2>${esc(kPrimaryRoom()?.name||'Ruum')}</h2><p class="muted">${esc(t.hallDescription)}</p><div class="booking-data-grid">${[['Mahutavus',t.hallCapacity],['Hind',kMoney($('clientType').value==='community'?p.community:p.commercial)+' € / h'],['Miinimum',p.minimumHours+' h']].map(([label,value])=>`<div class="booking-data"><small>${label}</small><strong>${esc(value)}</strong></div>`).join('')}</div><h3>Rendi hinna sees</h3><ul class="booking-include-list">${t.included.split('\n').filter(Boolean).map(x=>`<li>${esc(x)}</li>`).join('')}</ul><h3>Eraldi kokkuleppel</h3><p>${esc(t.extra)}</p>`;
+  if(!kSite)return kLegacy.renderBookingRoomInfo();
+  const room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();if(!room)return;
+  const t=kSite.texts,p=kSite.prices,isPrimary=room.id===kPrimaryRoom()?.id,community=$('clientType').value==='community';
+  const configuredRate=community?room?.pricing?.community:room?.pricing?.commercial;
+  const rate=Number.isFinite(configuredRate)?configuredRate:(isPrimary?(community?p.community:p.commercial):null);
+  const description=isPrimary?(t.hallDescription||room.text):room.text;
+  const capacity=isPrimary?(t.hallCapacity||room.capacity):room.capacity;
+  const minimum=(room.minimumMinutes||Math.round((isPrimary?p.minimumHours:1)*60))/60;
+  const included=isPrimary?t.included.split('\n').filter(Boolean):(room.included||[]);
+  const extra=isPrimary?t.extra:(room.extra||'');
+  $('bookingRoomInfo').innerHTML=`<h2>${esc(room.name)}</h2><p class="muted">${esc(description||'')}</p><div class="booking-data-grid">${[['Mahutavus',capacity||'—'],['Hind',Number.isFinite(rate)?kMoney(rate)+' € / h':'Kokkuleppel'],['Miinimum',minimum+' h'],['Puhver',(room.buffer||60)+' min']].map(([label,value])=>`<div class="booking-data"><small>${label}</small><strong>${esc(value)}</strong></div>`).join('')}</div>${included.length?'<h3>Rendi hinna sees</h3><ul class="booking-include-list">'+included.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>':''}${extra?'<h3>Eraldi kokkuleppel / lisainfo</h3><p>'+esc(extra)+'</p>':''}`;
 };
 submitBooking=async function(ev){
-  if(!kSite)return kLegacy.submitBooking(ev);ev.preventDefault();const button=$('submitBookingBtn');if(button.disabled)return;button.disabled=true;kNotice('bookingMessage','Kontrollin ja kinnitan broneeringut…');
+  if(!kSite)return kLegacy.submitBooking(ev);ev.preventDefault();const button=$('submitBookingBtn');if(button.disabled)return;button.disabled=true;kNotice('bookingMessage',HOUSE.publicBookingMode==='instant'?'Kontrollin ja kinnitan broneeringut…':'Kontrollin aega ja saadan broneeringusoovi…');
   try{const result=await post({action:'submitSiteBooking',roomId:$('bookRoom').value,date:$('bookDate').value,startTime:$('startTime').value,endTime:$('endTime').value,clientType:$('clientType').value,clientName:$('clientName').value.trim(),clientEmail:$('clientEmail').value.trim(),clientPhone:$('clientPhone').value.trim(),eventDescription:$('eventDescription').value.trim(),selectedServiceIds:[['serviceSound','sound'],['serviceLights','lights'],['serviceTechnician','technician']].filter(([id])=>$(id).checked).map(([,id])=>id)});kNotice('bookingMessage',`${result.message} Broneeringu number: ${result.bookingId}. ${result.warning||''}`);$('bookingForm').reset();$('bookDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)}catch(e){kNotice('bookingMessage',e.message,true);button.disabled=false;}
 };
 
