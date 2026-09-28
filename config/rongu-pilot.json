@@ -1,0 +1,104 @@
+{
+  "network": {
+    "id": "elva-vald",
+    "name": "Elva vald"
+  },
+  "organization": {
+    "id": "rongu-rahvamaja",
+    "name": "Rõngu Rahvamaja",
+    "networkId": "elva-vald",
+    "administrator": {
+      "name": "Jane Loidap",
+      "email": "jane.loidap@elva.ee"
+    }
+  },
+  "houses": [
+    {
+      "id": "rongu",
+      "organizationId": "rongu-rahvamaja",
+      "networkId": "elva-vald",
+      "name": "Rõngu Rahvamaja",
+      "address": "Valga mnt 12, Rõngu, 61001, Elva vald",
+      "phone": "+372 516 5531",
+      "email": "rongu.rahvamaja@elva.ee",
+      "publicBookingMode": "request",
+      "imageUrl": "",
+      "rooms": [
+        {
+          "id": "rongu-suur-saal",
+          "name": "Suur saal",
+          "areaM2": 162.2,
+          "hourlyPrice": 35,
+          "dayPrice": 450,
+          "minimumHours": 1,
+          "capacityNote": "lauad ja toolid kuni 150 inimesele",
+          "included": [
+            "lauad",
+            "toolid",
+            "esitlustehnika"
+          ],
+          "imageUrl": ""
+        },
+        {
+          "id": "rongu-vaike-saal",
+          "name": "Väike saal",
+          "areaM2": 82.8,
+          "hourlyPrice": 25,
+          "minimumHours": 1,
+          "imageUrl": ""
+        },
+        {
+          "id": "rongu-tegelaste-ruum",
+          "name": "Tegelaste ruum",
+          "areaM2": 28.8,
+          "hourlyPrice": 10,
+          "minimumHours": 1,
+          "imageUrl": ""
+        },
+        {
+          "id": "rongu-noortekeskuse-kook",
+          "name": "Noortekeskuse köök",
+          "areaM2": 32.9,
+          "hourlyPrice": 15,
+          "minimumHours": 1,
+          "imageUrl": ""
+        },
+        {
+          "id": "rongu-noortekeskuse-sinine-tuba",
+          "name": "Noortekeskuse sinine tuba",
+          "areaM2": 56.3,
+          "hourlyPrice": 15,
+          "minimumHours": 1,
+          "imageUrl": ""
+        }
+      ]
+    },
+    {
+      "id": "valguta",
+      "organizationId": "rongu-rahvamaja",
+      "networkId": "elva-vald",
+      "name": "Valguta Seltsimaja",
+      "address": "Valguta tee 10, 61008, Lapetukme küla, Elva vald",
+      "phone": "+372 5662 4839",
+      "email": "rongu.rahvamaja@elva.ee",
+      "publicBookingMode": "request",
+      "imageUrl": "",
+      "rooms": []
+    }
+  ],
+  "media": {
+    "mode": "upload",
+    "allowedTypes": [
+      "image/jpeg",
+      "image/png",
+      "image/webp"
+    ],
+    "maxBytes": 4194304,
+    "maxDisplayWidth": 1600
+  },
+  "notes": [
+    "Valguta ruumid ja hinnad tuleb enne broneerimise avamist juhatajaga kinnitada.",
+    "Heli- ja valguslahendus ei sisaldu Rõngu ruumirendis.",
+    "Ruumide minimaalne rendiaeg on 1 tund."
+  ]
+}
