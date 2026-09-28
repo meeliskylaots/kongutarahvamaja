@@ -19,7 +19,7 @@ Konguta avalik veeb ja töötajate töölaud. Avalik aadress: https://meeliskyla
 
 GitHub Pages avaldab ainult veebilehe. Uued õigused, hooajagraafik ja automaatne kinnitamine vajavad ka Apps Scripti v3 juurutust. Veeb kontrollib API versiooni ja kasutab enne seda senist töölauda.
 
-Ettevalmistatud serveri lähtekood (pole veel Google’is juurutatud): [Konguta / google/booking-apps-script.gs](google/booking-apps-script.gs).
+Serveri v3 lähtekood ja testid on ettevalmistatud kohalikus arendustöös. Neid ei avaldatud selles avalikus repos ega juurutatud Google’is. Serveriosa üleandmine ja avaldamine vajavad veel omaniku kinnitust.
 
 **Avaldamise piirang:** praegune API on Kultuuripesaga ühine. Ühise serveri muutmine vajab omaniku selget nõusolekut; Kultuuripesa repo jäi muutmata. Allolevad sammud rakenduvad alles pärast selle ulatuse kinnitamist. Alternatiiv on luua Kongutale eraldi Apps Scripti projekt ja asendada `API` aadress; see vajab eraldi juurutust.
 
@@ -48,7 +48,7 @@ AI kasutab Responses API struktureeritud väljundit, `store:false` ja kasutajap�
 Staatiline `index.html` ning `konguta-admin.js`; ehitamist ega npm-pakette pole vaja. GitHub Actions avaldab `main` muudatused Pagesi.
 
 - Frontendi kontrollid: `node tests/admin.test.cjs`.
-- Serveri kontrollid asuvad samas Konguta repos: `node google/tests/konguta-admin.test.cjs`.
+- Serveri kontrollid on ettevalmistatud koos kohaliku serveriuuendusega ja käivitatavad käsuga `node google/tests/konguta-admin.test.cjs`.
 - Kontrollid kasutavad mälus näidisandmeid, ei kirjuta päris kalendrisse ega saada päris kirju.
 - POST kasutab operatsiooni ID-d. Tulemuse korduv lugemine ja sama toimingu uuesti saatmine ei lisa topeltgraafikut. Seeria muutmise eelvaate revisjon kaitseb vahepealse muutmise eest.
 
