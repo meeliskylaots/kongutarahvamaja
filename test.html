@@ -19,10 +19,10 @@
 
     .availability-legend{display:flex;flex-wrap:wrap;gap:8px 14px;margin:16px 0 10px;font-size:11px;color:var(--muted)}
     .availability-legend span{display:inline-flex;align-items:center;gap:6px}.availability-legend i{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid transparent}
-    .availability-legend .legend-free{background:#e6f4e9;border-color:#91c8a0}.availability-legend .legend-partial{background:#fff1cc;border-color:#dbb760}.availability-legend .legend-full{background:#fbe3df;border-color:#db9c93}.availability-legend .legend-selected{background:transparent;border:2px solid var(--ink)}
+    .availability-legend .legend-free{background:#e6f4e9;border-color:#91c8a0}.availability-legend .legend-partial{background:#fff1cc;border-color:#dbb760}.availability-legend .legend-full{background:#fbe3df;border-color:#db9c93}.availability-legend .legend-event{background:#f5c9c1;border-color:#c96a5b}.availability-legend .legend-selected{background:transparent;border:2px solid var(--ink)}
     .calendar-day{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;padding:6px 2px;border:1px solid var(--line);transition:background .15s,border-color .15s}
     .calendar-day .day-number{font-size:14px;font-weight:800}.calendar-day .day-availability{font-size:9px;line-height:1.2;font-weight:600;white-space:nowrap}
-    .calendar-day.availability-free{background:#e6f4e9;border-color:#b5dbc0;color:#205939}.calendar-day.availability-partial{background:#fff1cc;border-color:#e5c777;color:#754a08}.calendar-day.availability-full{background:#fbe3df;border-color:#e6b2aa;color:#913329}.calendar-day.availability-unknown{background:#f3f5f4;border-color:#e1e7e3;color:#657577}.calendar-day.availability-past{background:#f7f8f7;border-color:#e8ece9;color:#95a19b}
+    .calendar-day.availability-free{background:#e6f4e9;border-color:#b5dbc0;color:#205939}.calendar-day.availability-partial{background:#fff1cc;border-color:#e5c777;color:#754a08}.calendar-day.availability-full{background:#fbe3df;border-color:#e6b2aa;color:#913329}.calendar-day.availability-event{background:#f5c9c1;border-color:#c96a5b;color:#842f25;font-weight:800}.calendar-day.availability-unknown{background:#f3f5f4;border-color:#e1e7e3;color:#657577}.calendar-day.availability-past{background:#f7f8f7;border-color:#e8ece9;color:#95a19b}
     .calendar-day.outside{opacity:.6}.calendar-day.today .day-number{text-decoration:underline;text-underline-offset:3px}.calendar-day.selected{outline:2px solid var(--ink);outline-offset:-3px;box-shadow:none}.calendar-day:focus-visible{outline:3px solid var(--teal);outline-offset:2px}.calendar-day:disabled{cursor:default}.calendar-day:not(:disabled):hover{filter:brightness(.97)}
     .calendar-load-state{min-height:18px;margin:8px 0;color:var(--muted);font-size:11px}.calendar-load-state.error{color:#913329}.calendar-load-state button{margin-left:7px;font-size:11px}.calendar-explanation{font-size:11px;color:var(--muted);margin:0 0 8px}
     @media(max-width:760px){.public-event-card{grid-template-columns:1fr}.public-event-visual{min-height:150px}.public-event-body{padding:18px}.shell{width:min(100% - 30px,600px)}.topbar-inner{height:66px}.nav{display:none}.hero{padding:33px 0 24px;grid-template-columns:1fr;gap:18px}.hero h1{font-size:46px;max-width:550px}.hero-copy{font-size:15px}.hero-art{height:245px;order:-1;border-radius:21px}.house{transform:translateX(-50%) scale(.82);transform-origin:bottom center;bottom:49px}.hill{bottom:27px}.hill.two{bottom:0}.quick-links{grid-template-columns:1fr;gap:9px;margin-bottom:41px}.quick-card{padding:13px}.quick-icon{width:38px;height:38px}.section{padding:43px 0}.section-head{align-items:start}.event-grid,.collective-grid,.room-grid{grid-template-columns:1fr}.info-band{grid-template-columns:1fr;gap:20px}.page-head{padding:31px 0 18px}.two-col{grid-template-columns:1fr;padding-bottom:35px}.booking-layout{grid-template-columns:1fr}.form-card,.panel{padding:17px}.footer{padding-bottom:95px}.footer-inner{display:block}.footer-links{margin-top:14px}.mobile-nav{position:fixed;z-index:12;left:10px;right:10px;bottom:9px;display:grid;grid-template-columns:repeat(5,1fr);gap:3px;padding:7px;background:rgba(255,254,250,.97);border:1px solid var(--line);border-radius:17px;box-shadow:0 10px 30px #183b3830;backdrop-filter:blur(12px)}.mobile-nav button{border:0;background:transparent;color:#78898a;padding:7px 2px;border-radius:11px;font-size:10px;font-weight:700;cursor:pointer}.mobile-nav button span{display:block;font-size:17px;margin-bottom:2px}.mobile-nav button.active{background:var(--mint);color:var(--teal-dark)}.field-grid{grid-template-columns:1fr 1fr}}
@@ -93,7 +93,7 @@
           <div class="calendar-nav"><button type="button" aria-label="Eelmine kuu" onclick="changeBookingMonth(-1)">‹</button><h2 id="bookingMonthLabel">Kalender</h2><button type="button" aria-label="Järgmine kuu" onclick="changeBookingMonth(1)">›</button></div>
           <div class="calendar-weekdays" aria-hidden="true"><span>E</span><span>T</span><span>K</span><span>N</span><span>R</span><span>L</span><span>P</span></div>
           <div id="bookingCalendar" class="calendar-days" aria-label="Broneerimise kalender"></div>
-          <div class="availability-legend" aria-label="Kalendri värvide tähendused"><span><i class="legend-free" aria-hidden="true"></i>Vaba</span><span><i class="legend-partial" aria-hidden="true"></i>Osaliselt hõivatud</span><span><i class="legend-full" aria-hidden="true"></i>Hõivatud</span><span><i class="legend-selected" aria-hidden="true"></i>Valitud päev</span></div><p id="bookingCalendarHint" class="calendar-explanation"></p><div id="bookingCalendarLoad" class="calendar-load-state" role="status" aria-live="polite"></div>
+          <div class="availability-legend" aria-label="Kalendri värvide tähendused"><span><i class="legend-free" aria-hidden="true"></i>Vaba</span><span><i class="legend-partial" aria-hidden="true"></i>Osaliselt hõivatud</span><span><i class="legend-full" aria-hidden="true"></i>Hõivatud</span><span><i class="legend-event" aria-hidden="true"></i>Üritus majas</span><span><i class="legend-selected" aria-hidden="true"></i>Valitud päev</span></div><p id="bookingCalendarHint" class="calendar-explanation"></p><div id="bookingCalendarLoad" class="calendar-load-state" role="status" aria-live="polite"></div>
           <div id="bookingDayInfo" class="schedule"><div class="loading">Vali kuupäev, et näha ruumi kasutust ja vabu aegu.</div></div>
           <div id="bookingDayAvailability" class="status-msg" aria-live="polite"></div>
         </div>
@@ -226,7 +226,7 @@
     let calendarSnapshot = null, calendarLoadedAt = 0, calendarRequest = null;
     let calendarGeneration = 0, calendarLoadState = 'idle';
     let bookingScheduleRequest = 0, eventScheduleRequest = 0;
-    const availabilityLabels = { free: 'Vaba', partial: 'Osaline', full: 'Hõivatud', unknown: 'Teadmata', past: 'Möödunud' };
+    const availabilityLabels = { free: 'Vaba', partial: 'Osaline', full: 'Hõivatud', event: 'Üritus', unknown: 'Teadmata', past: 'Möödunud' };
     function minimumUsageMinutes(roomId){return rooms.find(r=>r.id===roomId)?.minimumMinutes||1}
     function usageMinutes(time) {
       if (!/^(?:[01]\d|2[0-3]):[0-5]\d$|^24:00$/.test(String(time))) return NaN;
@@ -279,9 +279,15 @@
       return snapshot.filter(entry => entry.date === date && (!roomId || entry.roomId === roomId))
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
     }
+    function houseHasPublicEvent(date) {
+      if (!calendarSnapshot) return false;
+      return calendarSnapshot.some(entry => entry.date===date && entry.status==='confirmed' && entry.publicEvent===true && !['proov','trial','rehearsal','collective','huviring','ring','treening'].includes(String(entry.type||'').trim().toLowerCase()));
+    }
     function calendarDayAvailability(date, roomId = '') {
       if (!calendarSnapshot) return { code: 'unknown', free: [] };
-      if (roomId) return roomAvailability(snapshotDay(calendarSnapshot, date, roomId), roomId);
+      const roomState = roomId ? roomAvailability(snapshotDay(calendarSnapshot, date, roomId), roomId) : null;
+      if (houseHasPublicEvent(date)) return { code: 'event', free: roomState?.free || [] };
+      if (roomId) return roomState;
       const states = rooms.map(room => roomAvailability(snapshotDay(calendarSnapshot, date, room.id), room.id));
       const code = states.some(x => x.code === 'unknown') ? 'unknown' : states.every(x => x.code === 'free') ? 'free' : states.every(x => x.code === 'full') ? 'full' : 'partial';
       return { code, free: [] };
@@ -342,7 +348,7 @@
         const iso = date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
         const state = iso < today ? { code: 'past' } : calendarDayAvailability(iso, roomId);
         const label = state.code === 'unknown' && calendarLoadState !== 'error' ? 'Laadin' : availabilityLabels[state.code];
-        const description = { free:'Vaba päev', partial:'Osaliselt hõivatud, sobivaid vabu aegu on veel', full:'Hõivatud, sobivat vaba aega kell 08.00–23.00 ei ole', unknown:'Saadavus ei ole teada', past:'Möödunud päev' }[state.code];
+        const description = { free:'Vaba päev', partial:'Osaliselt hõivatud, sobivaid vabu aegu on veel', full:'Hõivatud, sobivat vaba aega kell 08.00–23.00 ei ole', event:'Majas toimub avalik sündmus; broneerimine võib olla piiratud', unknown:'Saadavus ei ole teada', past:'Möödunud päev' }[state.code];
         const fullDate = new Intl.DateTimeFormat('et-EE', { dateStyle: 'full' }).format(date);
         const classes = ['calendar-day', 'availability-'+state.code];
         if (date.getMonth() !== month-1) classes.push('outside');
@@ -460,7 +466,7 @@
       $('bookingMonthLabel').textContent = new Intl.DateTimeFormat('et-EE',{month:'long',year:'numeric'}).format(new Date(year,month-1,1));
       const roomId = $('bookRoom').value;
       $('bookingCalendar').innerHTML = calendarGridHTML(bookingCalendarMonth, selected, roomId, 'selectBookingCalendarDate', true);
-      $('bookingCalendarHint').textContent = `Valitud ruumi saadavus kell ${HOUSE.calendar.dayStart}–${HOUSE.calendar.dayEnd} koos puhvriga.${minimumUsageMinutes(roomId)>1?' Vaba vahemik peab olema vähemalt '+minimumUsageMinutes(roomId)/60+' tundi.':''} Täpseid aegu näed päeval klõpsates.`;
+      $('bookingCalendarHint').textContent = `Valitud ruumi saadavus kell ${HOUSE.calendar.dayStart}–${HOUSE.calendar.dayEnd} koos puhvriga.${minimumUsageMinutes(roomId)>1?' Vaba vahemik peab olema vähemalt '+minimumUsageMinutes(roomId)/60+' tundi.':''} Punane „Üritus” tähendab, et majas toimub avalik sündmus ja uus broneering võib olla piiratud. Täpseid aegu näed päeval klõpsates.`;
     }
     function selectBookingCalendarDate(date){$('bookDate').value=date;bookingCalendarMonth=date.slice(0,7);bookingDayEntries=[];renderBookingCalendar();loadBookingSchedule()}
     function changeBookingMonth(delta) {
