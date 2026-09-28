@@ -135,15 +135,22 @@ async function kLoadWorkspace(force=false){
   try{return await kWorkspaceRequest}finally{kWorkspaceRequest=null}
 }
 renderStaff=async function(){
-  if(!staffUser)return;$('loginForm').classList.add('hidden');$('staffPanel').classList.remove('hidden');$('staffPanel').parentElement.style.maxWidth='none';$('staffWelcome').textContent=`Tere, ${staffUser.name}`;
-  $('staffContent').innerHTML='<p class="loading">Laadin töölauda…</p>';
-  try{await kLoadWorkspace(true);kRenderStaff();}catch(e){if(e.message==='SERVER_UPDATE_REQUIRED'){await kLegacy.renderStaff();$('staffPanel').parentElement.style.maxWidth='none';$('staffContent').insertAdjacentHTML('afterbegin','<div class="status-msg">Haldusuuenduse serveriosa ootab ühendamist. Seni saad kasutada senist töölauda.</div>');}else $('staffContent').innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;}
+  if(!staffUser)return;
+  $('loginForm').classList.add('hidden');$('staffPanel').classList.remove('hidden');$('staffPanel').parentElement.style.maxWidth='none';$('staffWelcome').textContent=`Tere, ${staffUser.name}`;
+  if(kWorkspace){kRenderStaff();return;}
+  $('staffContent').innerHTML='<p class="loading">Laadin töölauda esimest korda…</p>';
+  try{await kLoadWorkspace();kRenderStaff();}catch(e){if(e.message==='SERVER_UPDATE_REQUIRED'){await kLegacy.renderStaff();$('staffPanel').parentElement.style.maxWidth='none';$('staffContent').insertAdjacentHTML('afterbegin','<div class="status-msg">Haldusuuenduse serveriosa ootab ühendamist. Seni saad kasutada senist töölauda.</div>');}else $('staffContent').innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;}
 };
+async function kReloadStaff(){
+  if(!staffUser)return;
+  const root=$('staffContent');root.innerHTML='<p class="loading">Uuendan andmeid…</p>';
+  try{await kLoadWorkspace(true);kRenderStaff();}catch(e){root.innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="kReloadStaff()">Proovi uuesti</button>`;}
+}
 logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
 function kRenderStaff(){
   const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['import','AI import'],['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
-  $('staffContent').innerHTML=`<p class="hint">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
+  $('staffContent').innerHTML=`<div class="panel-header"><p class="hint" style="margin:0">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><button class="button outline small" type="button" onclick="kReloadStaff()">Uuenda andmeid</button></div><nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
   const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];$('kStaffSection').innerHTML=content();
   if(kStaffTab==='calendar')kRenderBookings();
 }
