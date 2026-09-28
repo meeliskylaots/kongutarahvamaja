@@ -1,6 +1,6 @@
 /* Kultuuripesa house workspace. Availability and permissions are always enforced by the API. */
 let kSite = null, kWorkspace = null, kPublicRequest = null, kWorkspaceRequest = null;
-let kStaffTab = 'calendar', kSchedulePending = null, kEditPending = null, kEditing = null;
+let kStaffTab = 'calendar', kSchedulePending = null, kEditPending = null, kEditing = null, kImportDraft = null;
 const kLegacy = {renderStaff,loadCollectives,loadPublicHouse,showCalendarEntryForDate,loadCalendarCollectives,getQuote,updateQuote,renderBookingRoomInfo,submitBooking,post,logout};
 const kPrimaryRoom = () => rooms.find(r=>r.id===HOUSE?.primaryRoomId) || rooms[0] || null;
 const kRoomIsUnpriced = roomId => { const room=rooms.find(r=>r.id===roomId); return !!room && !Number.isFinite(room?.pricing?.community) && !Number.isFinite(room?.pricing?.commercial); };
@@ -141,10 +141,10 @@ renderStaff=async function(){
 };
 logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
 function kRenderStaff(){
-  const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
+  const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['import','AI import'],['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
   $('staffContent').innerHTML=`<p class="hint">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
-  const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];$('kStaffSection').innerHTML=content();
+  const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];$('kStaffSection').innerHTML=content();
   if(kStaffTab==='calendar')kRenderBookings();
 }
 function kSwitchStaff(tab){kStaffTab=tab;kRenderStaff();}
@@ -237,6 +237,90 @@ function kActivitiesHTML(){const groups=kWorkspace.collectives;return `<section 
 function kAddActivity(){$('kActivityEditors').insertAdjacentHTML('beforeend',kActivityEditor({id:HOUSE.id+'-'+crypto.randomUUID(),location:HOUSE.name}));$('kActivityEditors').lastElementChild.open=true;}
 function kRemoveActivity(button){if(confirm('Eemaldan kollektiivi avalikust loetelust pärast salvestamist. Olemasolevad kalendrikirjed säilivad. Kas jätkata?'))button.closest('.k-activity').remove();}
 async function kSaveActivities(ev){ev.preventDefault();const button=ev.submitter;button.disabled=true;try{const activities=[...$('kActivityEditors').querySelectorAll('.k-activity')].map(el=>({id:el.dataset.id,...Object.fromEntries([...el.querySelectorAll('[data-key]')].map(i=>[i.dataset.key,i.value.trim()]))}));await post({action:'houseSaveActivities',revision:kSite.revision,activities});await kLoadWorkspace(true);kRenderActivities();kNotice('kActivitiesMessage','Info on salvestatud ja kodulehel nähtav.');}catch(e){kNotice('kActivitiesMessage',e.message,true);}finally{button.disabled=false;}}
+
+function kImportHTML(){
+  const season=kSeasonRange(etDate());
+  const years=[season.year-1,season.year,season.year+1];
+  return `<section class="panel"><h2>Impordi kollektiivid AI abil</h2><p class="hint">Kleebi siia korraga kollektiivide info. AI eraldab nimed, prooviajad, tegutsemiskohad, juhendajad ja kontaktid. Midagi ei salvestata enne sinu kinnitust.</p>${kText('Kollektiivide alginfo','kImportText','','maxlength="12000" placeholder="Näiteks: Need on Rõngu Rahvamaja kollektiivid. Segakoor Ringen – proov teisipäeviti 19.00–21.00 suures saalis, juhendaja …"')}<div class="field-grid"><label class="field"><span>Proovikalendri hooaeg</span><select id="kImportSeason">${years.map(y=>`<option value="${y}" ${y===season.year?'selected':''}>${y}/${y+1}</option>`).join('')}</select></label><label class="service-option" style="align-self:end"><input id="kImportCalendar" type="checkbox" checked><span>Lisa täielikud prooviajad ka kalendrisse</span></label></div><button class="button" id="kImportAnalyze" type="button" onclick="kRunCollectiveImportAI()" ${kWorkspace.aiAvailable?'':'disabled'}>Analüüsi AI abil</button>${kWorkspace.aiAvailable?'':'<p class="status-msg error">AI-abiline pole serveris ühendatud.</p>'}<div id="kImportMessage" class="status-msg" aria-live="polite"></div><div id="kImportReview"></div></section>`;
+}
+async function kRunCollectiveImportAI(){
+  const text=$('kImportText').value.trim(),button=$('kImportAnalyze');
+  if(text.length<10){kNotice('kImportMessage','Kleebi esmalt kollektiivide info.',true);return;}
+  button.disabled=true;kNotice('kImportMessage','AI analüüsib kollektiive, proovigraafikuid ja kontakte…');
+  try{
+    const result=await post({action:'houseImportCollectivesDraft',text});
+    kImportDraft={...result,collectives:(result.collectives||[]).map(c=>({...c,_id:c.existingId||HOUSE.id+'-'+crypto.randomUUID()}))};
+    kNotice('kImportMessage',result.message+(result.summary?' '+result.summary:''));
+    kRenderImportReview();
+  }catch(e){kNotice('kImportMessage',e.message,true);}finally{button.disabled=false;}
+}
+function kImportWeekdayOptions(selected){
+  return '<option value="">Vali päev</option>'+kDayNames.map((d,i)=>`<option value="${i+1}" ${Number(selected)===i+1?'selected':''}>${d}</option>`).join('');
+}
+function kImportRoomOptions(selected){
+  return '<option value="">Vali ruum / ära lisa kalendrisse</option>'+rooms.map(r=>`<option value="${esc(r.id)}" ${r.id===selected?'selected':''}>${esc(r.name)}</option>`).join('');
+}
+function kRenderImportReview(){
+  const box=$('kImportReview');if(!box||!kImportDraft)return;
+  const items=kImportDraft.collectives||[];
+  box.innerHTML=`<section class="k-review" style="margin-top:20px"><div class="panel-header"><div><h3 style="margin:0">Kontrolli enne salvestamist</h3><p class="hint" style="margin:5px 0 0">AI leidis ${items.length} kollektiivi. Punase märkusega väljad vajavad sinu tähelepanu.</p></div></div><div class="managed-activities">${items.map((c,i)=>{
+    const warnings=(c.warnings||[]);
+    const existing=c.existingId?'<span class="badge good">olemasolev</span>':'<span class="badge">uus</span>';
+    const rehearsals=(c.rehearsals||[]).map((r,j)=>`<div class="rate-card k-import-rehearsal" data-r="${j}"><div class="field-grid"><label class="field"><span>Prooviruum</span><select data-rkey="roomId">${kImportRoomOptions(r.roomId||'')}</select></label><label class="field"><span>Nädalapäev</span><select data-rkey="weekday">${kImportWeekdayOptions(r.weekday)}</select></label></div><div class="field-grid">${kField('Algus','kImportStart_'+i+'_'+j,r.startTime||'','time','data-rkey="startTime"')}${kField('Lõpp','kImportEnd_'+i+'_'+j,r.endTime||'','time','data-rkey="endTime"')}</div></div>`).join('');
+    return `<article class="k-import-item" data-index="${i}" data-id="${esc(c._id)}" data-existing-id="${esc(c.existingId||'')}" style="border:1px solid var(--line);border-radius:14px;padding:16px"><div class="panel-header"><h3 style="margin:0">${esc(c.name||'Nimi puudub')}</h3>${existing}</div><div class="field-grid">${kField('Nimi','kImportName_'+i,c.name||'','text','data-ikey="name" required maxlength="100"')}${kField('Tegutsemiskoht','kImportLocation_'+i,c.location||'','text','data-ikey="location" required maxlength="200"')}</div>${kText('Prooviaja kirjeldus','kImportSchedule_'+i,c.schedule||'','data-ikey="schedule" maxlength="400"')}<div class="field-grid">${kField('Juhendaja','kImportInstructor_'+i,c.instructor||'','text','data-ikey="instructor" maxlength="160"')}${kField('Kontakt e-post','kImportEmail_'+i,c.email||'','email','data-ikey="email" maxlength="120"')}</div>${kField('Telefon','kImportPhone_'+i,c.phone||'','text','data-ikey="phone" maxlength="80"')}${kText('Tutvustus','kImportDescription_'+i,c.description||'','data-ikey="description" maxlength="2000"')}<h4 style="margin:16px 0 8px">Proovikalender</h4>${rehearsals||'<p class="hint">AI ei leidnud sellest infost kalendrisse lisatavat täpset prooviaega.</p>'}${warnings.length?`<div class="status-msg error"><strong>Kontrolli:</strong> ${warnings.map(esc).join(' · ')}</div>`:''}</article>`;
+  }).join('')}</div><button class="button" id="kImportSave" type="button" onclick="kSaveCollectiveImport()">Salvesta kontrollitud andmed</button><div id="kImportSaveMessage" class="status-msg" aria-live="polite"></div></section>`;
+}
+function kReadImportReview(){
+  return [...document.querySelectorAll('.k-import-item')].map(el=>{
+    const values={};el.querySelectorAll('[data-ikey]').forEach(input=>values[input.dataset.ikey]=input.value.trim());
+    const rehearsals=[...el.querySelectorAll('.k-import-rehearsal')].map(row=>{
+      const r={};row.querySelectorAll('[data-rkey]').forEach(input=>r[input.dataset.rkey]=input.dataset.rkey==='weekday'?(input.value?Number(input.value):null):(input.value||null));return r;
+    });
+    return {id:el.dataset.id,existingId:el.dataset.existingId||null,...values,rehearsals};
+  });
+}
+function kActivityForImport(item){
+  const old=kWorkspace.collectives.find(c=>c.id===item.id)||{};
+  const use=(key)=>item[key]||old[key]||'';
+  return {id:item.id,name:use('name'),schedule:use('schedule'),location:use('location'),instructor:use('instructor'),email:use('email'),phone:use('phone'),description:use('description'),imageUrl:old.imageUrl||'',imageAlt:old.imageAlt||'',linkUrl:old.linkUrl||'',leaderUserId:old.leaderUserId||''};
+}
+async function kSaveCollectiveImport(){
+  const button=$('kImportSave');if(!button)return;
+  const imported=kReadImportReview();
+  const invalid=imported.filter(x=>!x.name||!x.location);
+  if(invalid.length){kNotice('kImportSaveMessage','Kõigil kollektiividel peab enne salvestamist olema nimi ja tegutsemiskoht.',true);return;}
+  button.disabled=true;kNotice('kImportSaveMessage','Salvestan kollektiivide infot…');
+  try{
+    const all=new Map(kWorkspace.collectives.filter(c=>c.active!==false).map(c=>[c.id,kActivityForImport({id:c.id})]));
+    imported.forEach(item=>all.set(item.id,kActivityForImport(item)));
+    await post({action:'houseSaveActivities',revision:kSite.revision,activities:[...all.values()]});
+    await kLoadWorkspace(true);
+    kRenderActivities();
+    let scheduleCount=0,skipped=[];
+    if($('kImportCalendar')?.checked){
+      const year=Number($('kImportSeason').value),start=`${year}-09-01`,end=`${year+1}-07-31`;
+      for(const item of imported){
+        for(const r of item.rehearsals||[]){
+          if(!r.roomId||!r.weekday||!r.startTime||!r.endTime){if((item.rehearsals||[]).length)skipped.push(item.name+' – prooviaeg või ruum puudulik');continue;}
+          let dates;
+          try{dates=kBuildDates(start,end,r.weekday,[],false).dates;}catch(e){skipped.push(item.name+' – '+e.message);continue;}
+          const draft={action:'houseSaveSchedule',type:'Proov',collectiveId:item.id,roomId:r.roomId,dates,startTime:r.startTime,endTime:r.endTime,publicTitle:item.name,publicEvent:true,notes:'AI impordiga lisatud proovigraafik',notify:'none'};
+          try{
+            const check=await post({...draft,dryRun:true});
+            if(check.conflicts?.length){skipped.push(item.name+' – '+check.conflicts.length+' kattuvat kuupäeva');continue;}
+            if(check.count){const saved=await post({...draft,requestId:'KRM-IMPORT-'+crypto.randomUUID()});scheduleCount+=saved.count||0;}
+          }catch(e){skipped.push(item.name+' – '+e.message);}
+        }
+      }
+      await kLoadWorkspace(true);
+      invalidateCalendarAvailability();
+    }
+    const extra=skipped.length?` ${skipped.length} proovigraafikut vajab veel kontrolli: ${skipped.join('; ')}`:'';
+    kNotice('kImportSaveMessage',`Kollektiivide info on salvestatud.${scheduleCount?' Kalendrisse lisati '+scheduleCount+' proovikirjet.':''}${extra}`,!!skipped.length);
+  }catch(e){kNotice('kImportSaveMessage',e.message,true);button.disabled=false;return;}
+  button.disabled=false;
+}
+
 const kPriceFields={community:'Kogukonnasõbralik kasutus €/h',commercial:'Kommertskasutus €/h',minimumHours:'Saali minimaalne rendiaeg tundides',sound:'Helitehnika €/üritus',lights:'Valgustus €/üritus',technicianCommunity:'Tehniline tugi kogukonnale €/h',technicianCommercial:'Tehniline tugi kommertskasutusel €/h',technicianMinimum:'Tehnilise toe miinimum tundides'};
 const kTextFields={homeTitle:'Avalehe pealkiri',homeDescription:'Avalehe tutvustus',homeNote:'Avalehe lisalause',communityTitle:'Kogukonna osa pealkiri',communityDescription:'Kogukonna osa tekst',activitiesDescription:'Huvitegevuse sissejuhatus',address:'Aadress',phone:'Telefon',email:'E-post',hallDescription:'Saali tutvustus',hallCapacity:'Saali mahutavus',included:'Rendi hinna sees (iga asi eraldi reale)',extra:'Eraldi kokkuleppel'};
 function kSettingsHTML(){return `<section class="panel"><h2>Kodulehe sisu ja hinnad</h2><form id="kSettingsForm" onsubmit="kSaveSettings(event)"><details class="k-activity" open><summary>Hinnakiri</summary><div class="field-grid k-activity-fields">${Object.entries(kPriceFields).map(([key,label])=>kField(label,'kPrice_'+key,kSite.prices[key],'number',`required min="${key.endsWith('Hours')||key.endsWith('Minimum')?'0.25':'0'}" max="10000" step="0.25"`)).join('')}</div></details><details class="k-activity"><summary>Avaleht, kontakt ja saal</summary><div class="k-activity-fields">${Object.entries(kTextFields).map(([key,label])=>kText(label,'kText_'+key,kSite.texts[key],'maxlength="3000"')).join('')}</div></details><button type="submit" class="button">Salvesta sisu ja hinnad</button><div id="kSettingsMessage" class="status-msg" aria-live="polite"></div></form></section><section class="panel"><h2>Pildid ja ruumide lisainfo</h2><div class="content-list">${[{type:'house',id:HOUSE.id,name:'Avalehe pilt'},...rooms.map(r=>({type:'room',...r}))].map(r=>`<button class="content-option" onclick="kImageEditor('${r.type}','${r.id}')">${esc(r.name)}</button>`).join('')}</div><div id="kImageEditor"></div></section>`;}
