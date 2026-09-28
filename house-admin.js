@@ -248,7 +248,39 @@ async function kSaveActivities(ev){ev.preventDefault();const button=ev.submitter
 function kImportHTML(){
   const season=kSeasonRange(etDate());
   const years=[season.year-1,season.year,season.year+1];
-  return `<section class="panel"><h2>Impordi kollektiivid AI abil</h2><p class="hint">Kleebi siia korraga kollektiivide info. AI eraldab nimed, prooviajad, tegutsemiskohad, juhendajad ja kontaktid. Midagi ei salvestata enne sinu kinnitust.</p>${kText('Kollektiivide alginfo','kImportText','','maxlength="12000" placeholder="Näiteks: Need on Rõngu Rahvamaja kollektiivid. Segakoor Ringen – proov teisipäeviti 19.00–21.00 suures saalis, juhendaja …"')}<div class="field-grid"><label class="field"><span>Proovikalendri hooaeg</span><select id="kImportSeason">${years.map(y=>`<option value="${y}" ${y===season.year?'selected':''}>${y}/${y+1}</option>`).join('')}</select></label><label class="service-option" style="align-self:end"><input id="kImportCalendar" type="checkbox" checked><span>Lisa täielikud prooviajad ka kalendrisse</span></label></div><button class="button" id="kImportAnalyze" type="button" onclick="kRunCollectiveImportAI()" ${kWorkspace.aiAvailable?'':'disabled'}>Analüüsi AI abil</button>${kWorkspace.aiAvailable?'':'<p class="status-msg error">AI-abiline pole serveris ühendatud.</p>'}<div id="kImportMessage" class="status-msg" aria-live="polite"></div><div id="kImportReview"></div></section>`;
+  const example=`Segakoor Ringen
+Proov: teisipäeviti 19.00–21.00
+Koht: Rõngu Rahvamaja, suur saal
+Juhendaja: Mari Maasik
+E-post: mari@example.ee
+Telefon: 512 3456
+
+Rahvatantsurühm Rukkilill
+Proovid: kolmapäeviti 18.30–20.00 ja pühapäeviti 17.00–19.00
+Koht: Rõngu Rahvamaja, väike saal
+Juhendaja: Jaan Tamm
+Telefon: 5555 5555`;
+  return `<section class="panel"><h2>Impordi kollektiivid AI abil</h2><p class="hint">Kleebi siia korraga kollektiivide info. AI eraldab nimed, prooviajad, tegutsemiskohad, juhendajad ja kontaktid. Midagi ei salvestata enne sinu kinnitust.</p>
+  <details class="k-activity" open>
+    <summary>Kuidas sisestada, et AI saaks infost hästi aru?</summary>
+    <div class="k-activity-fields">
+      <p class="hint"><strong>Üks kollektiiv ühe lõigu kaupa.</strong> Võid kirjutada tavakeeles — kindlat vormi ei pea järgima.</p>
+      <ul class="booking-include-list">
+        <li><strong>Nimi</strong> – kollektiivi või huviringi nimi.</li>
+        <li><strong>Prooviaeg</strong> – nädalapäev ning võimalusel algus- ja lõpuaeg, nt „teisipäeviti 19.00–21.00”.</li>
+        <li><strong>Koht / ruum</strong> – kirjuta võimalusel maja ja ruumi nimi täpselt nii, nagu need Kultuuripesas on.</li>
+        <li><strong>Juhendaja</strong> – nimi.</li>
+        <li><strong>Kontakt</strong> – e-post ja/või telefon.</li>
+        <li><strong>Tutvustus</strong> – soovi korral lühike avalik kirjeldus kollektiivist.</li>
+      </ul>
+      <p class="hint">Kui kollektiivil on mitu proovipäeva, kirjuta need kõik välja. Kui mõni info puudub, jäta see lihtsalt kirjutamata — AI ei peaks seda ise välja mõtlema.</p>
+      <p class="hint"><strong>Hea näide:</strong></p>
+      <pre style="white-space:pre-wrap;margin:0;padding:14px;border:1px solid var(--line);border-radius:12px;background:#f7f8f4;font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace">${esc(example)}</pre>
+      <p class="hint">Võid ka kopeerida info vanalt kodulehelt, Wordist, e-kirjast või tabelist. Pärast analüüsi näed kõiki AI leitud välju enne salvestamist ja saad neid parandada.</p>
+    </div>
+  </details>
+  ${kText('Kollektiivide alginfo','kImportText','','maxlength="12000" placeholder="Kleebi siia kollektiivide info. Soovitus: üks kollektiiv ühe lõigu kaupa; lisa nimi, prooviaeg, koht/ruum, juhendaja ja kontaktid, kui need on teada."')}
+  <div class="field-grid"><label class="field"><span>Proovikalendri hooaeg</span><select id="kImportSeason">${years.map(y=>`<option value="${y}" ${y===season.year?'selected':''}>${y}/${y+1}</option>`).join('')}</select></label><label class="service-option" style="align-self:end"><input id="kImportCalendar" type="checkbox" checked><span>Lisa täielikud prooviajad ka kalendrisse</span></label></div><button class="button" id="kImportAnalyze" type="button" onclick="kRunCollectiveImportAI()" ${kWorkspace.aiAvailable?'':'disabled'}>Analüüsi AI abil</button>${kWorkspace.aiAvailable?'':'<p class="status-msg error">AI-abiline pole serveris ühendatud.</p>'}<div id="kImportMessage" class="status-msg" aria-live="polite"></div><div id="kImportReview"></div></section>`;
 }
 async function kRunCollectiveImportAI(){
   const text=$('kImportText').value.trim(),button=$('kImportAnalyze');
