@@ -118,7 +118,7 @@ async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingI
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
 function kIsoWeekday(date){return ((new Date(date+'T12:00:00Z').getUTCDay()+6)%7)+1;}
 async function kNewSchedule(date=etDate()){
-  try{await kLoadWorkspace();showView('events');$('eventDate').value=date;eventListMode='day';await loadEventSchedule('day');kShowSchedule(date);$('adminCalendarEntryPanel').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){alert(e.message==='SERVER_UPDATE_REQUIRED'?'Serveri haldusuuendus pole veel ühendatud.':e.message);}
+  try{await kLoadWorkspace();showView('login');kShowSchedule(date);$('adminCalendarEntryPanel').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){alert(e.message==='SERVER_UPDATE_REQUIRED'?'Serveri haldusuuendus pole veel ühendatud.':e.message);}
 }
 showCalendarEntryForDate=function(date){if(!staffUser)return;if(kWorkspace)kShowSchedule(date);else if(manager())kLegacy.showCalendarEntryForDate(date);};
 loadCalendarCollectives=async function(){if(!staffUser)return;try{await kLoadWorkspace();}catch(e){if(manager())return kLegacy.loadCalendarCollectives();}};
