@@ -83,7 +83,7 @@ function kApplyPublic(){
   $('bookingConfirmationHint').textContent=instant?'Vaba aeg kinnitatakse kohe pärast kalendri ja puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.':'Päring saadetakse rahvamajale kinnitamiseks. Avalikus kalendris näidatakse menetluses aega neutraalselt, ilma sinu kontaktandmeteta.';
   if($('eventBookingHint'))$('eventBookingHint').textContent=instant?'Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.':'Vali sobiv aeg ja saada ruumi kasutamise soov. Rahvamaja kinnitab broneeringu eraldi.';
   updateQuote();renderBookingRoomInfo();renderBookingCalendar();
-  document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel'))el.textContent=`Valitud ruumi saadavus kell 08.00–23.00 koos puhvriga. Saali vaba vahemik peab olema vähemalt ${kMinimumHours()} tundi.`;});
+  document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel')){const room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();const minHours=(room?.minimumMinutes||kMinimumHours()*60)/60;el.textContent=`${room?.name||'Ruumi'} saadavus kell ${HOUSE.calendar.dayStart}–${HOUSE.calendar.dayEnd} koos puhvriga.${minHours>0?' Vaba vahemik peab olema vähemalt '+minHours+' tundi.':''}`;}});
 }
 getQuote=function(){
   if(!kSite)return kLegacy.getQuote();
