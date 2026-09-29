@@ -199,6 +199,10 @@ async function kLoadWorkspaceSection(section,force=false){
     if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');
     if(!result?.ok)throw new Error(result?.error||'Töölauda ei saanud laadida.');
     kWorkspace._loadedSections=kWorkspace._loadedSections||{};
+    if(result.section!==section){
+      if(Object.prototype.hasOwnProperty.call(kWorkspace,section)){kWorkspace._loadedSections[section]=true;return kWorkspace;}
+      throw new Error('SERVER_UPDATE_REQUIRED');
+    }
     if(section==='ideas')kWorkspace.ideas=result.ideas||[];
     if(section==='contracts')kWorkspace.contracts=result.contracts||[];
     if(section==='users')kWorkspace.users=result.users||[];
@@ -230,8 +234,12 @@ async function kLoadWorkspace(force=false){
     if(!result.ok)throw new Error(result.error||'Töölauda ei saanud laadida.');
     if(!result.apiVersion||result.apiVersion<3||!result.site)throw new Error('SERVER_UPDATE_REQUIRED');
     const previous=kWorkspace||{},loaded={...(previous._loadedSections||{})};
+    for(const key of ['contracts','ideas','users','activity'])if(Object.prototype.hasOwnProperty.call(result,key))loaded[key]=true;
     kWorkspace={...previous,...result,
-      contracts:previous.contracts||[],ideas:previous.ideas||[],users:previous.users||[],activity:previous.activity||[],
+      contracts:Object.prototype.hasOwnProperty.call(result,'contracts')?(result.contracts||[]):(previous.contracts||[]),
+      ideas:Object.prototype.hasOwnProperty.call(result,'ideas')?(result.ideas||[]):(previous.ideas||[]),
+      users:Object.prototype.hasOwnProperty.call(result,'users')?(result.users||[]):(previous.users||[]),
+      activity:Object.prototype.hasOwnProperty.call(result,'activity')?(result.activity||[]):(previous.activity||[]),
       _loadedSections:loaded};
     staffUser=result.user||staffUser;kSite=result.site;
     siteSettings={homeDescription:kSite.texts.homeDescription,activities:kSite.activities};
