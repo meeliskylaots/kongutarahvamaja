@@ -190,7 +190,7 @@
       $('view-'+name)?.classList.add('active');
       document.querySelectorAll('[data-view]').forEach(x=>{x.classList.toggle('active',x.dataset.view===name);if(x.dataset.view===name)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current');});
       $('bookingBack').textContent=history.state?.kongutaView==='booking'&&history.state?.from?'← Tagasi':'← Avalehele';
-      document.querySelectorAll('a[href*="kultuuriekraan.html"]').forEach(a=>a.href='kultuuriekraan.html?from='+encodeURIComponent(name));
+      document.querySelectorAll('a[href*="kultuuriekraan.html"]').forEach(a=>a.href='kultuuriekraan.html?house='+encodeURIComponent(HOUSE.id)+'&from='+encodeURIComponent(name));
       window.scrollTo({top:0,behavior:'auto'});
       const heading=$('view-'+name)?.querySelector('h1');if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true});}
       if(name==='home')loadHomeEvents();
