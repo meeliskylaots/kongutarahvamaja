@@ -198,12 +198,96 @@ async function kSaveIdea(id){
   }catch(e){kNotice('ideaMsg_'+id,e.message,true);}
 }
 
+
+const kContractStatusLabels={saadetud:'Ootab kliendi kinnitust',kinnitatud:'Kinnitatud',asendatud:'Asendatud',tühistatud:'Tühistatud'};
+function kContractForBooking(bookingId){
+  return (kWorkspace?.contracts||[]).filter(c=>c.bookingId===bookingId).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0]||null;
+}
+function kContractSuggestedPrice(b){
+  const stored=Number(b.estimatedTotal||0);if(stored>0)return stored;
+  const room=rooms.find(r=>r.id===b.roomId),rate=Number.isFinite(room?.pricing?.community)?room.pricing.community:Number.isFinite(room?.pricing?.commercial)?room.pricing.commercial:null;
+  if(!Number.isFinite(rate))return 0;
+  const mins=t=>{const [h,m]=String(t||'0:0').split(':').map(Number);return h*60+m};
+  const hours=Math.max(1,Math.ceil((mins(b.endTime)-mins(b.startTime))/60));return Math.max(0,hours*rate);
+}
+function kDefaultContractGeneral(){
+  return 'Ruumi kasutatakse ainult kokkulepitud ajal ja eesmärgil. Kasutaja järgib rahvamaja töötaja juhiseid ning vastutab enda ja kutsutud osalejate tegevuse eest. Tekitatud kahjust või rikkest teavitatakse rahvamaja viivitamata. Pärast kasutust antakse ruum üle kokkulepitud seisukorras. Kokkuleppe muudatused tuleb pooltel enne kasutust eraldi kinnitada.';
+}
+function kDefaultContractCancellation(){
+  return 'Tühistamisest teavitatakse rahvamaja esimesel võimalusel. Tühistamisega seotud tasud või kulud kehtivad ainult siis, kui need on käesolevas kokkuleppes eraldi kokku lepitud.';
+}
+function kContractViewHTML(c){
+  return `<div class="status-msg ${c.status==='kinnitatud'?'':'error'}"><strong>${esc(kContractStatusLabels[c.status]||c.status)}</strong>${c.acceptedAt?` · ${esc(new Intl.DateTimeFormat('et-EE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(c.acceptedAt)))}`:''}</div>
+  <div class="booking-data-grid">
+    <div class="booking-data"><small>Lepingu ID</small><strong>${esc(c.id)}</strong></div>
+    <div class="booking-data"><small>Versioon</small><strong>${esc(c.version)}</strong></div>
+    <div class="booking-data"><small>Hind</small><strong>${kMoney(c.price)} €</strong></div>
+    <div class="booking-data"><small>Kinnitaja</small><strong>${esc(c.acceptedName||'—')}</strong></div>
+  </div>
+  ${c.priceNote?`<h3>Hinna märkus</h3><p>${esc(c.priceNote)}</p>`:''}
+  ${c.included?`<h3>Hinna sees</h3><p style="white-space:pre-wrap">${esc(c.included)}</p>`:''}
+  ${c.specialTerms?`<h3>Eritingimused</h3><p style="white-space:pre-wrap">${esc(c.specialTerms)}</p>`:''}
+  <h3>Tühistamise tingimused</h3><p style="white-space:pre-wrap">${esc(c.cancellationTerms)}</p>
+  <h3>Üldtingimused</h3><p style="white-space:pre-wrap">${esc(c.generalTerms)}</p>`;
+}
+function kOpenContract(bookingId){
+  const b=kWorkspace.bookings.find(x=>x.id===bookingId);if(!b)return;
+  const current=kContractForBooking(bookingId);
+  $('kContractDialog')?.remove();const dialog=document.createElement('dialog');dialog.id='kContractDialog';dialog.className='k-dialog';dialog.setAttribute('aria-labelledby','kContractHeading');
+  if(current?.status==='kinnitatud'){
+    dialog.innerHTML=`<div class="panel-header"><h2 id="kContractHeading">Ruumi kasutamise kokkulepe</h2><button type="button" class="text-link" onclick="$('kContractDialog').close()">Sulge</button></div><p>${esc(b.name)} · ${esc(kDateLabel(b.date))} · ${esc(b.roomName)}</p>${kContractViewHTML(current)}<div class="row-actions"><button class="button outline small" onclick="kResendContractPdf('${esc(current.id)}')">Saada PDF uuesti kliendile</button></div><div id="kContractMessage" class="status-msg"></div>`;
+  }else{
+    const room=rooms.find(r=>r.id===b.roomId)||{},price=current?.price??kContractSuggestedPrice(b);
+    const included=current?.included||((room.included||[]).join('\n'));
+    const special=current?.specialTerms||[b.notes,room.extra].filter(Boolean).join('\n');
+    const cancellation=current?.cancellationTerms||kDefaultContractCancellation();
+    const general=current?.generalTerms||kDefaultContractGeneral();
+    const priceNote=current?.priceNote||'Lõpliku summa aluseks on käesolev kokkulepe.';
+    dialog.innerHTML=`<div class="panel-header"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise kokkulepe</h2></div><button type="button" class="text-link" onclick="$('kContractDialog').close()">Sulge</button></div>
+    <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>
+    ${current?.status==='saadetud'?`<div class="status-msg">Kliendile on juba saadetud versioon ${esc(current.version)}. Uue versiooni saatmisel muutub eelmine link kehtetuks.</div>`:''}
+    <form id="kContractForm" onsubmit="kSendContract(event,'${esc(b.id)}')">
+      <div class="field-grid">${kField('Kokkulepitud hind €','kContractPrice',price,'number','required min="0" max="1000000" step="0.01"')}${kField('Hinna märkus','kContractPriceNote',priceNote,'text','maxlength="1200"')}</div>
+      ${kText('Hinna sees','kContractIncluded',included,'maxlength="4000" placeholder="Näiteks: ruum, lauad ja toolid…"')}
+      ${kText('Eritingimused','kContractSpecial',special,'maxlength="5000" placeholder="Näiteks võtme üleandmine, tehnika, koristuse erikokkulepe…"')}
+      ${kText('Tühistamise tingimused','kContractCancellation',cancellation,'required maxlength="5000"')}
+      ${kText('Üldtingimused','kContractGeneral',general,'required maxlength="10000"')}
+      <p class="hint">Saatmisel lukustatakse see lepinguversioon. Klient saab personaalse lingi e-postile ja pärast kinnitamist PDF-koopia.</p>
+      <button class="button" id="kContractSend" type="submit">Saada kliendile kinnitamiseks</button><div id="kContractMessage" class="status-msg" aria-live="polite"></div>
+    </form>`;
+  }
+  document.body.appendChild(dialog);dialog.showModal();
+}
+async function kSendContract(ev,bookingId){
+  ev.preventDefault();const button=$('kContractSend');button.disabled=true;kNotice('kContractMessage','Koostan lepinguversiooni ja saadan kliendile…');
+  try{
+    const result=await post({action:'sendContract',bookingId,price:Number($('kContractPrice').value),priceNote:$('kContractPriceNote').value.trim(),included:$('kContractIncluded').value.trim(),specialTerms:$('kContractSpecial').value.trim(),cancellationTerms:$('kContractCancellation').value.trim(),generalTerms:$('kContractGeneral').value.trim()});
+    kNotice('kContractMessage',result.message);await kLoadWorkspace(true);setTimeout(()=>{$('kContractDialog')?.close();kRenderStaff();},700);
+  }catch(e){kNotice('kContractMessage',e.message,true);button.disabled=false;}
+}
+async function kResendContractPdf(contractId){
+  kNotice('kContractMessage','Saadan PDF-koopia uuesti…');
+  try{const result=await post({action:'resendContractPdf',contractId});kNotice('kContractMessage',result.message);}catch(e){kNotice('kContractMessage',e.message,true);}
+}
+
 function kBookingsHTML(){return `<section class="panel"><div class="panel-header"><h2>Proovid ja sündmused</h2><button class="button small" onclick="kNewSchedule()">${manager()?'Lisa proov või üritus':'Lisa oma kollektiivi proov'}</button></div><div class="k-filter-grid">${kField('Alates','kListFrom',etDate(),'date')}${kField('Kuni','kListTo',kSeasonRange(etDate()).end,'date')}<label class="field"><span>Kollektiiv</span><select id="kListCollective"><option value="">Kõik</option>${kWorkspace.collectives.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label><label class="service-option"><input type="checkbox" id="kShowCancelled"><span>Näita tühistatud kirjeid</span></label></div><button class="button outline small" onclick="kRenderBookings()">Näita valikut</button><p id="kBookingCount" class="hint"></p><div id="kBookingList" class="k-booking-list"></div></section>`;}
 function kRenderBookings(){
   const from=$('kListFrom').value,to=$('kListTo').value,group=$('kListCollective').value,cancelled=$('kShowCancelled').checked;
   const list=kWorkspace.bookings.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||b.status!=='tühistatud')).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   $('kBookingCount').textContent=`Valikus ${list.length} kirjet. Muutmiseks vali kirje juures „Muuda”.`;
-  $('kBookingList').innerHTML=list.map(b=>`<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${manager()&&!b.collectiveId?`<p>${esc(b.name)} ${esc(b.email)} ${esc(b.phone)}</p>`:''}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${b.status==='tühistatud'?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${manager()&&b.status==='ootel'?`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita varasem päring</button>`:''}`}</div></article>`).join('')||'<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
+  $('kBookingList').innerHTML=list.map(b=>{
+    const contract=kContractForBooking(b.id),external=manager()&&!b.collectiveId&&!!b.email;
+    const contractInfo=external&&contract?`<p class="hint"><strong>Kokkulepe:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
+    let primary='';
+    if(manager()&&external){
+      if(contract?.status==='kinnitatud'||contract?.status==='saadetud')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata kokkulepet':'Vaata / muuda kokkulepet'}</button>`;
+      else if(b.status==='ootel')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta kokkulepe</button>`;
+    }else if(manager()&&b.status==='ootel')primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
+    const actions=b.status==='tühistatud'
+      ?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`
+      :`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
+    return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
+  }).join('')||'<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
 }
 async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await renderStaff();}catch(e){alert(e.message);}}
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
