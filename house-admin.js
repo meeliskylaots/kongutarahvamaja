@@ -276,14 +276,14 @@ function kRenderBookings(){
   const list=kWorkspace.bookings.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||b.status!=='tühistatud')).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   $('kBookingCount').textContent=`Valikus ${list.length} kirjet. Muutmiseks vali kirje juures „Muuda”.`;
   $('kBookingList').innerHTML=list.map(b=>{
-    const contract=kContractForBooking(b.id),external=manager()&&!b.collectiveId&&!!b.email;
+    const contract=kContractForBooking(b.id),status=String(b.status||'').toLowerCase().trim(),external=manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering',active=!['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(status);
     const contractInfo=external&&contract?`<p class="hint"><strong>Kokkulepe:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
     let primary='';
     if(manager()&&external){
       if(contract?.status==='kinnitatud'||contract?.status==='saadetud')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata kokkulepet':'Vaata / muuda kokkulepet'}</button>`;
-      else if(b.status==='ootel')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta kokkulepe</button>`;
-    }else if(manager()&&b.status==='ootel')primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
-    const actions=b.status==='tühistatud'
+      else if(active)primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta kokkulepe</button>`;
+    }else if(manager()&&['ootel','pending'].includes(status))primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
+    const actions=!active
       ?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`
       :`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
     return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
