@@ -580,19 +580,43 @@
     function b64(bytes){let bin='';bytes.forEach(x=>bin+=String.fromCharCode(x));return btoa(bin)}function unb64(v){return Uint8Array.from(atob(v),c=>c.charCodeAt(0))}async function verifier(password,salt,iterations){const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:unb64(salt),iterations:Number(iterations),hash:'SHA-256'},key,256);return b64(new Uint8Array(bits))}async function proof(value,nonce){return b64(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value+'|'+nonce))))}
     async function login(){const btn=$('loginButton'),email=$('loginEmail').value.trim().toLowerCase(),password=$('loginPassword').value;if(!email||!password){setMessage('loginMessage','Sisesta e-post ja parool.',true);return}btn.disabled=true;setMessage('loginMessage','Kontrollin sisselogimist…');try{const c=await jsonp({action:'authChallenge',email});if(!c?.ok)throw new Error(c?.error||'Sisselogimine ebaõnnestus.');const v=await verifier(password,c.salt,c.iterations);const p=await proof(v,c.nonce);const r=await jsonp({action:'authLogin',email,challengeId:c.challengeId,proof:p});if(!r?.ok||!r.sessionToken)throw new Error(r?.error||'E-post või parool ei sobi.');staffToken=r.sessionToken;staffUser=r.user;localStorage.setItem(SESS,staffToken);$('loginPassword').value='';await renderStaff()}catch(e){setMessage('loginMessage',e.message||'Sisselogimine ebaõnnestus.',true)}finally{btn.disabled=false}}
     let staffSessionCheck=null;
+    function kStoredSessionKeys(){return typeof SESSION_KEYS!=='undefined'?SESSION_KEYS:[SESS]}
+    function kForgetStoredSession(){kStoredSessionKeys().forEach(key=>localStorage.removeItem(key));staffToken='';staffUser=null;if(typeof kClearWorkspaceCache==='function')kClearWorkspaceCache(true)}
     async function ensureStaffAccess(){
-      if(staffToken&&staffUser){await renderStaff();return true}
-      const token=localStorage.getItem(SESS)||'';
+      if(staffToken&&staffUser){
+        if(typeof kWorkspace!=='undefined'&&kWorkspace&&typeof kRenderStaff==='function'){kRenderStaff();return true}
+        await renderStaff();return true
+      }
+      let token='';for(const key of kStoredSessionKeys()){token=localStorage.getItem(key)||'';if(token)break}
       if(!token){$('staffPanel')?.classList.add('hidden');$('loginForm')?.classList.remove('hidden');return false}
+      staffToken=token;
+      if(typeof kRestoreWorkspaceCache==='function'&&kRestoreWorkspaceCache(token)){
+        $('loginForm')?.classList.add('hidden');$('staffPanel')?.classList.remove('hidden');
+        if(typeof kRenderStaff==='function')kRenderStaff();else await renderStaff();
+        if(typeof kLoadWorkspace==='function'&&!kWorkspaceRequest){
+          kLoadWorkspace(true).then(()=>{if($('view-login')?.classList.contains('active')&&typeof kRenderStaff==='function')kRenderStaff()}).catch(error=>{
+            if(/aegunud|logi uuesti|ligipääs on suletud/i.test(String(error?.message||''))){kForgetStoredSession();$('staffPanel')?.classList.add('hidden');$('loginForm')?.classList.remove('hidden');setMessage('loginMessage','Sessioon on aegunud. Logi uuesti sisse.',true)}
+          });
+        }
+        return true
+      }
       if(staffSessionCheck)return staffSessionCheck;
       staffSessionCheck=(async()=>{
         try{
           if($('view-login')?.classList.contains('active')){$('loginForm')?.classList.add('hidden');$('staffPanel')?.classList.remove('hidden');if($('staffContent'))$('staffContent').innerHTML='<p class="loading">Taastan sinu töölauda…</p>'}
-          const r=await jsonp({action:'authSession',session:token});
-          if(r?.ok&&r.user){staffToken=token;staffUser=r.user;if($('view-login')?.classList.contains('active'))await renderStaff();return true}
-          localStorage.removeItem(SESS);staffToken='';staffUser=null;$('staffPanel')?.classList.add('hidden');$('loginForm')?.classList.remove('hidden');return false
-        }catch(e){$('staffPanel')?.classList.add('hidden');$('loginForm')?.classList.remove('hidden');setMessage('loginMessage','Sessiooni kontrollimine ebaõnnestus. Proovi uuesti.',true);return false}
-        finally{staffSessionCheck=null}
+          if(typeof kLoadWorkspace==='function'){
+            const result=await kLoadWorkspace(true);staffUser=result.user||staffUser;
+          }else{
+            const r=await jsonp({action:'authSession',session:token});if(!r?.ok||!r.user)throw new Error(r?.error||'Seanss on aegunud.');staffUser=r.user;
+          }
+          if(!staffUser)throw new Error('Seanss on aegunud. Logi uuesti sisse.');
+          localStorage.setItem(SESS,token);kStoredSessionKeys().filter(key=>key!==SESS).forEach(key=>localStorage.removeItem(key));
+          if($('view-login')?.classList.contains('active'))await renderStaff();
+          return true
+        }catch(e){
+          if(/aegunud|logi uuesti|ligipääs on suletud/i.test(String(e?.message||'')))kForgetStoredSession();
+          $('staffPanel')?.classList.add('hidden');$('loginForm')?.classList.remove('hidden');setMessage('loginMessage',e.message||'Töölauda ei saanud taastada. Proovi uuesti.',true);return false
+        }finally{staffSessionCheck=null}
       })();
       return staffSessionCheck
     }
