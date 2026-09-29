@@ -1,6 +1,30 @@
 /* Kultuuripesa house workspace. Availability and permissions are always enforced by the API. */
 let kSite = null, kWorkspace = null, kPublicRequest = null, kWorkspaceRequest = null;
 let kStaffTab = 'calendar', kSchedulePending = null, kEditPending = null, kEditing = null, kImportDraft = null;
+const kStaffCachePrefix = `culturehub_staff_workspace_v1:${ORG.id}:`;
+const kStaffCacheKey = kStaffCachePrefix + HOUSE.id;
+const kStaffTabKey = `culturehub_staff_tab_v1:${ORG.id}:${HOUSE.id}`;
+try{const savedTab=sessionStorage.getItem(kStaffTabKey);if(savedTab)kStaffTab=savedTab;}catch(e){}
+function kClearWorkspaceCache(allOrg=false){
+  try{
+    if(allOrg){for(let i=sessionStorage.length-1;i>=0;i--){const key=sessionStorage.key(i);if(key&&key.startsWith(kStaffCachePrefix))sessionStorage.removeItem(key);}}
+    else sessionStorage.removeItem(kStaffCacheKey);
+  }catch(e){}
+}
+function kSaveWorkspaceCache(){
+  if(!staffToken||!staffUser||!kWorkspace)return;
+  try{sessionStorage.setItem(kStaffCacheKey,JSON.stringify({savedAt:Date.now(),token:staffToken,user:staffUser,workspace:kWorkspace}));}catch(e){}
+}
+function kRestoreWorkspaceCache(token){
+  try{
+    const cached=JSON.parse(sessionStorage.getItem(kStaffCacheKey)||'null');
+    if(!cached||cached.token!==token||!cached.workspace||!cached.user)return false;
+    if(Date.now()-Number(cached.savedAt||0)>15*60*1000){sessionStorage.removeItem(kStaffCacheKey);return false;}
+    staffUser=cached.user;kWorkspace=cached.workspace;kSite=kWorkspace.site||kSite;
+    if(kSite){siteSettings={homeDescription:kSite.texts.homeDescription,activities:kSite.activities};calendarCollectiveRecords=kWorkspace.collectives||[];calendarCollectivesLoaded=true;syncCalendarCollectives();kApplyPublic();}
+    return true;
+  }catch(e){return false;}
+}
 const kLegacy = {renderStaff,loadCollectives,loadPublicHouse,showCalendarEntryForDate,loadCalendarCollectives,getQuote,updateQuote,renderBookingRoomInfo,submitBooking,post,logout};
 const kPrimaryRoom = () => rooms.find(r=>r.id===HOUSE?.primaryRoomId) || rooms[0] || null;
 const kRoomIsUnpriced = roomId => { const room=rooms.find(r=>r.id===roomId); return !!room && !Number.isFinite(room?.pricing?.community) && !Number.isFinite(room?.pricing?.commercial); };
@@ -51,7 +75,7 @@ post = async function(payload) {
     result = await kLegacy.post({...payload,action:legacyAction});
   }
   if(!payload.dryRun && ['houseSaveSchedule','houseEditUsage','houseSaveActivities','houseSaveSettings','kongutaSaveSchedule','kongutaEditUsage','kongutaSaveActivities','kongutaSaveSettings'].includes(payload.action)) {
-    invalidateCalendarAvailability(); kWorkspace=null;
+    invalidateCalendarAvailability(); kWorkspace=null; kClearWorkspaceCache();
   }
   return result;
 };
@@ -165,7 +189,17 @@ submitBooking=async function(ev){
 
 async function kLoadWorkspace(force=false){
   if(kWorkspace&&!force)return kWorkspace;if(kWorkspaceRequest)return kWorkspaceRequest;
-  const token=staffToken;kWorkspaceRequest=(async()=>{let result=await jsonp({action:'houseWorkspace',session:token});if(!result?.apiVersion&&result?.message==='Kultuuripesa Apps Script töötab.')result=await jsonp({action:'kongutaWorkspace',session:token});if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');if(!result.ok)throw new Error(result.error||'Töölauda ei saanud laadida.');if(!result.apiVersion||result.apiVersion<3||!result.site)throw new Error('SERVER_UPDATE_REQUIRED');kWorkspace=result;kSite=result.site;siteSettings={homeDescription:kSite.texts.homeDescription,activities:kSite.activities};calendarCollectiveRecords=result.collectives;calendarCollectivesLoaded=true;syncCalendarCollectives();kApplyPublic();return result;})();
+  const token=staffToken;kWorkspaceRequest=(async()=>{
+    let result=await jsonp({action:'houseWorkspace',session:token});
+    if(!result?.apiVersion&&result?.message==='Kultuuripesa Apps Script töötab.')result=await jsonp({action:'kongutaWorkspace',session:token});
+    if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');
+    if(!result.ok)throw new Error(result.error||'Töölauda ei saanud laadida.');
+    if(!result.apiVersion||result.apiVersion<3||!result.site)throw new Error('SERVER_UPDATE_REQUIRED');
+    kWorkspace=result;staffUser=result.user||staffUser;kSite=result.site;
+    siteSettings={homeDescription:kSite.texts.homeDescription,activities:kSite.activities};
+    calendarCollectiveRecords=result.collectives||[];calendarCollectivesLoaded=true;syncCalendarCollectives();kApplyPublic();kSaveWorkspaceCache();
+    return result;
+  })();
   try{return await kWorkspaceRequest}finally{kWorkspaceRequest=null}
 }
 renderStaff=async function(){
@@ -180,7 +214,7 @@ async function kReloadStaff(){
   const root=$('staffContent');root.innerHTML='<p class="loading">Uuendan andmeid…</p>';
   try{await kLoadWorkspace(true);kRenderStaff();}catch(e){root.innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="kReloadStaff()">Proovi uuesti</button>`;}
 }
-logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
+logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;kClearWorkspaceCache(true);$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
 function kRenderStaff(){
   const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['ideas','Ideed'],['import','AI import'],['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
@@ -188,7 +222,7 @@ function kRenderStaff(){
   const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,ideas:kIdeasHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];$('kStaffSection').innerHTML=content();
   if(kStaffTab==='calendar')kRenderBookings();
 }
-function kSwitchStaff(tab){kStaffTab=tab;kRenderStaff();}
+function kSwitchStaff(tab){kStaffTab=tab;try{sessionStorage.setItem(kStaffTabKey,tab);}catch(e){}kRenderStaff();}
 
 function kHouseUrl(id){
   const configured=APP_CONFIG?.organization?.houses?.find?.(h=>h.id===id)?.url;
