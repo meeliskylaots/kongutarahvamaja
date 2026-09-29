@@ -87,6 +87,16 @@ function kApplyPublic(){
   $('submitBookingBtn').textContent=instant?'Broneeri ruum':'Saada broneeringusoov →';
   $('bookingConfirmationHint').textContent=instant?'Vaba aeg kinnitatakse kohe pärast kalendri ja puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.':'Päring saadetakse rahvamajale kinnitamiseks. Avalikus kalendris näidatakse menetluses aega neutraalselt, ilma sinu kontaktandmeteta.';
   if($('eventBookingHint'))$('eventBookingHint').textContent=instant?'Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.':'Vali sobiv aeg ja saada ruumi kasutamise soov. Rahvamaja kinnitab broneeringu eraldi.';
+  if(HOUSE.pricingMode==='room'){
+    const typeField=$('clientType')?.closest('.field');if(typeField)typeField.style.display='none';
+    const rateCard=$('communityRateCard')?.closest('.rate-card');if(rateCard){const grid=rateCard.querySelector('.rate-grid');if(grid)grid.style.display='none';const h=rateCard.querySelector('h3');if(h)h.textContent='Ruumirendi hind';const note=rateCard.querySelector('.quote-note');if(note)note.textContent=HOUSE.feeNote||'Hind sõltub valitud ruumist.';}
+  }
+  if(HOUSE.servicesMode==='request'){
+    document.querySelectorAll('.service-options input').forEach(i=>{i.checked=false;i.disabled=true;});
+    const options=document.querySelector('.service-options');if(options)options.style.display='none';
+    const heading=[...document.querySelectorAll('#bookingForm h2')].find(x=>x.textContent.includes('Lisateenused'));if(heading)heading.textContent='Tehnika ja lisavajadused';
+    const hint=heading?.nextElementSibling;if(hint?.classList.contains('hint'))hint.textContent='Heli-, valgus- ja muud tehnilised vajadused kirjelda allpool. Rahvamaja täpsustab lahenduse ja hinna eraldi.';
+  }
   updateQuote();renderBookingRoomInfo();renderBookingCalendar();
   document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel')){const room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();const minHours=(room?.minimumMinutes||kMinimumHours()*60)/60;el.textContent=`${room?.name||'Ruumi'} saadavus kell ${HOUSE.calendar.dayStart}–${HOUSE.calendar.dayEnd} koos puhvriga.${minHours>0?' Vaba vahemik peab olema vähemalt '+minHours+' tundi.':''}`;}});
 }
@@ -114,7 +124,7 @@ updateQuote=function(){
   $('serviceSound').closest('label').querySelector('b').textContent=kMoney(p.sound)+' € / üritus';
   $('serviceLights').closest('label').querySelector('b').textContent=kMoney(p.lights)+' € / üritus';
   $('technicianRate').textContent=`${kMoney(q.community?p.technicianCommunity:p.technicianCommercial)} € / h, vähemalt ${p.technicianMinimum} h`;
-  $('quoteBox').innerHTML=`<h3>Hinna arvestus</h3><div class="quote-row"><span>Ruumirent ${q.outdoor?'':`${kMoney(q.hourly)} €/h × ${q.hours} h`}</span><strong>${q.outdoor?'Kokkuleppel':q.valid?euro(q.roomCost):'—'}</strong></div>${q.selected.map(x=>`<div class="quote-row"><span>${esc(x.label)}</span><strong>${euro(x.total)}</strong></div>`).join('')}<div class="quote-row quote-total"><span>Kokku</span><strong>${q.valid?euro(q.total):'—'}</strong></div><p class="quote-note">${q.outdoor?'Väliala rendihind lepitakse eraldi kokku. ':''}Arvestus kehtiva hinnakirja järgi. Arve ja erikokkulepped täpsustab rahvamaja.</p>`;
+  $('quoteBox').innerHTML=`<h3>Hinna arvestus</h3><div class="quote-row"><span>Ruumirent ${q.outdoor?'':`${kMoney(q.hourly)} €/h × ${q.hours} h`}</span><strong>${q.outdoor?'Kokkuleppel':q.valid?euro(q.roomCost):'—'}</strong></div>${q.selected.map(x=>`<div class="quote-row"><span>${esc(x.label)}</span><strong>${euro(x.total)}</strong></div>`).join('')}<div class="quote-row quote-total"><span>${HOUSE.publicBookingMode==='instant'?'Kokku':'Hinnanguline ruumirent'}</span><strong>${q.valid?euro(q.total):'—'}</strong></div><p class="quote-note">${q.outdoor?'Valitud ruumi hind lepitakse eraldi kokku. ':''}${HOUSE.servicesMode==='request'?'Tehnika ja muud lisavajadused hinnastab rahvamaja eraldi. ':''}Arvestus kehtiva hinnakirja järgi; erandid ja lõpliku summa kinnitab rahvamaja.</p>`;
 };
 renderBookingRoomInfo=function(){
   if(!kSite)return kLegacy.renderBookingRoomInfo();
@@ -127,7 +137,8 @@ renderBookingRoomInfo=function(){
   const minimum=(room.minimumMinutes||Math.round((isPrimary?p.minimumHours:1)*60))/60;
   const included=isPrimary?t.included.split('\n').filter(Boolean):(room.included||[]);
   const extra=isPrimary?t.extra:(room.extra||'');
-  $('bookingRoomInfo').innerHTML=`<h2>${esc(room.name)}</h2><p class="muted">${esc(description||'')}</p><div class="booking-data-grid">${[['Mahutavus',capacity||'—'],['Hind',Number.isFinite(rate)?kMoney(rate)+' € / h':'Kokkuleppel'],['Miinimum',minimum+' h'],['Puhver',(room.buffer||60)+' min']].map(([label,value])=>`<div class="booking-data"><small>${label}</small><strong>${esc(value)}</strong></div>`).join('')}</div>${included.length?'<h3>Rendi hinna sees</h3><ul class="booking-include-list">'+included.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>':''}${extra?'<h3>Eraldi kokkuleppel / lisainfo</h3><p>'+esc(extra)+'</p>':''}`;
+  const dayPackage=Number.isFinite(room?.dayPrice)?`<div class="status-msg" style="margin-top:14px"><strong>Päevapakett ${kMoney(room.dayPrice)} €</strong><br>${esc(room.dayLabel||'Päevapaketi tingimused täpsustab rahvamaja.')} Päevapaketi soovi korral märgi see sündmuse kirjeldusse; juhataja kinnitab üle südaöö aja eraldi.</div>`:'';
+  $('bookingRoomInfo').innerHTML=`<h2>${esc(room.name)}</h2><p class="muted">${esc(description||'')}</p><div class="booking-data-grid">${[['Mahutavus',capacity||'—'],['Hind',Number.isFinite(rate)?kMoney(rate)+' € / h':'Kokkuleppel'],['Miinimum',minimum+' h'],['Puhver',(room.buffer||60)+' min']].map(([label,value])=>`<div class="booking-data"><small>${label}</small><strong>${esc(value)}</strong></div>`).join('')}</div>${dayPackage}${HOUSE.feeNote?`<p class="hint">${esc(HOUSE.feeNote)}</p>`:''}${included.length?'<h3>Rendi hinna sees</h3><ul class="booking-include-list">'+included.map(x=>`<li>${esc(x)}</li>`).join('')+'</ul>':''}${extra?'<h3>Eraldi kokkuleppel / lisainfo</h3><p>'+esc(extra)+'</p>':''}`;
 };
 submitBooking=async function(ev){
   if(!kSite)return kLegacy.submitBooking(ev);ev.preventDefault();const button=$('submitBookingBtn');if(button.disabled)return;button.disabled=true;kNotice('bookingMessage',HOUSE.publicBookingMode==='instant'?'Kontrollin ja kinnitan broneeringut…':'Kontrollin aega ja saadan broneeringusoovi…');
