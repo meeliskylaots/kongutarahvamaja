@@ -1,7 +1,7 @@
 /* Kultuuripesa house workspace. Availability and permissions are always enforced by the API. */
 let kSite = null, kWorkspace = null, kPublicRequest = null, kWorkspaceRequest = null;
 let kStaffTab = 'calendar', kSchedulePending = null, kEditPending = null, kEditing = null, kImportDraft = null;
-const kStaffCachePrefix = `culturehub_staff_workspace_v1:${ORG.id}:`;
+const kStaffCachePrefix = `culturehub_staff_workspace_v2:${ORG.id}:`;
 const kStaffCacheKey = kStaffCachePrefix + HOUSE.id;
 const kStaffTabKey = `culturehub_staff_tab_v1:${ORG.id}:${HOUSE.id}`;
 try{const savedTab=sessionStorage.getItem(kStaffTabKey);if(savedTab)kStaffTab=savedTab;}catch(e){}
@@ -187,6 +187,40 @@ submitBooking=async function(ev){
   }catch(e){kNotice('bookingMessage',e.message,true);button.disabled=false;}
 };
 
+const kSectionRequests={};
+function kSectionLoaded(section){return !!kWorkspace?._loadedSections?.[section]}
+async function kLoadWorkspaceSection(section,force=false){
+  if(!kWorkspace)await kLoadWorkspace();
+  if(kSectionLoaded(section)&&!force)return kWorkspace;
+  if(kSectionRequests[section])return kSectionRequests[section];
+  const token=staffToken;
+  kSectionRequests[section]=(async()=>{
+    const result=await jsonp({action:'houseWorkspaceSection',section,session:token});
+    if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');
+    if(!result?.ok)throw new Error(result?.error||'Töölauda ei saanud laadida.');
+    kWorkspace._loadedSections=kWorkspace._loadedSections||{};
+    if(section==='ideas')kWorkspace.ideas=result.ideas||[];
+    if(section==='contracts')kWorkspace.contracts=result.contracts||[];
+    if(section==='users')kWorkspace.users=result.users||[];
+    if(section==='activity')kWorkspace.activity=result.activity||[];
+    kWorkspace._loadedSections[section]=true;kSaveWorkspaceCache();return kWorkspace;
+  })();
+  try{return await kSectionRequests[section]}finally{delete kSectionRequests[section]}
+}
+async function kEnsureWorkspaceSection(section,force=false){
+  try{
+    await kLoadWorkspaceSection(section,force);
+    if(!$('view-login')?.classList.contains('active'))return;
+    if(section==='contracts'&&kStaffTab==='calendar'&&$('kBookingList'))kRenderBookings();
+    else if(kStaffTab===section)kRenderStaff();
+  }catch(e){
+    if(section==='contracts'&&kStaffTab==='calendar'&&$('kBookingList')){
+      const count=$('kBookingCount');if(count)count.textContent='Lepingu olekut ei saanud praegu laadida. Broneeringute andmed on siiski nähtavad.';
+    }else if(kStaffTab===section&&$('kStaffSection')){
+      $('kStaffSection').innerHTML=`<p class="status-msg error">${esc(e.message||'Andmeid ei saanud laadida.')}</p><button class="button small" onclick="kEnsureWorkspaceSection('${section}',true)">Proovi uuesti</button>`;
+    }
+  }
+}
 async function kLoadWorkspace(force=false){
   if(kWorkspace&&!force)return kWorkspace;if(kWorkspaceRequest)return kWorkspaceRequest;
   const token=staffToken;kWorkspaceRequest=(async()=>{
@@ -195,10 +229,14 @@ async function kLoadWorkspace(force=false){
     if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');
     if(!result.ok)throw new Error(result.error||'Töölauda ei saanud laadida.');
     if(!result.apiVersion||result.apiVersion<3||!result.site)throw new Error('SERVER_UPDATE_REQUIRED');
-    kWorkspace=result;staffUser=result.user||staffUser;kSite=result.site;
+    const previous=kWorkspace||{},loaded={...(previous._loadedSections||{})};
+    kWorkspace={...previous,...result,
+      contracts:previous.contracts||[],ideas:previous.ideas||[],users:previous.users||[],activity:previous.activity||[],
+      _loadedSections:loaded};
+    staffUser=result.user||staffUser;kSite=result.site;
     siteSettings={homeDescription:kSite.texts.homeDescription,activities:kSite.activities};
     calendarCollectiveRecords=result.collectives||[];calendarCollectivesLoaded=true;syncCalendarCollectives();kApplyPublic();kSaveWorkspaceCache();
-    return result;
+    return kWorkspace;
   })();
   try{return await kWorkspaceRequest}finally{kWorkspaceRequest=null}
 }
@@ -212,15 +250,24 @@ renderStaff=async function(){
 async function kReloadStaff(){
   if(!staffUser)return;
   const root=$('staffContent');root.innerHTML='<p class="loading">Uuendan andmeid…</p>';
-  try{await kLoadWorkspace(true);kRenderStaff();}catch(e){root.innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="kReloadStaff()">Proovi uuesti</button>`;}
+  try{
+    await kLoadWorkspace(true);
+    const lazy={ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
+    if(lazy)await kLoadWorkspaceSection(lazy,true);
+    if(kStaffTab==='calendar'&&manager())await kLoadWorkspaceSection('contracts',true);
+    kRenderStaff();
+  }catch(e){root.innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="kReloadStaff()">Proovi uuesti</button>`;}
 }
 logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;kClearWorkspaceCache(true);$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
 function kRenderStaff(){
   const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['ideas','Ideed'],['import','AI import'],['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
   $('staffContent').innerHTML=`<div class="panel-header"><p class="hint" style="margin:0">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><button class="button outline small" type="button" onclick="kReloadStaff()">Uuenda andmeid</button></div>${manager()?kOrganizationSummaryHTML():kLeaderQuickHTML()}<nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
-  const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,ideas:kIdeasHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];$('kStaffSection').innerHTML=content();
-  if(kStaffTab==='calendar')kRenderBookings();
+  const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,ideas:kIdeasHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];
+  const lazy={ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
+  $('kStaffSection').innerHTML=lazy&&!kSectionLoaded(lazy)?'<p class="loading">Laadin selle vaate andmeid…</p>':content();
+  if(kStaffTab==='calendar'){kRenderBookings();if(manager()&&!kSectionLoaded('contracts'))kEnsureWorkspaceSection('contracts');}
+  else if(lazy&&!kSectionLoaded(lazy))kEnsureWorkspaceSection(lazy);
 }
 function kSwitchStaff(tab){kStaffTab=tab;try{sessionStorage.setItem(kStaffTabKey,tab);}catch(e){}kRenderStaff();}
 
@@ -230,7 +277,7 @@ function kHouseUrl(id){
 }
 function kOrganizationSummaryHTML(){
   const summary=kWorkspace?.organizationSummary;if(!summary?.houses?.length)return '';
-  return `<section class="panel" style="margin:14px 0"><div class="panel-header"><div><span class="eyebrow">Kõik majad</span><h2 style="margin:6px 0 0">${esc(ORG.name)}</h2></div></div><div class="booking-data-grid">${summary.houses.map(h=>`<div class="booking-data" style="text-align:left"><small>${esc(h.name)}</small><strong>${h.today} täna · ${h.pending} ootel</strong><span class="hint">${h.newIdeas} uut ideed · ${h.upcoming} tulevast kasutust</span><a class="text-link" href="${esc(kHouseUrl(h.id))}#login">Ava maja →</a></div>`).join('')}</div></section>`;
+  return `<section class="panel" style="margin:14px 0"><div class="panel-header"><div><span class="eyebrow">Kõik majad</span><h2 style="margin:6px 0 0">${esc(ORG.name)}</h2></div></div><div class="booking-data-grid">${summary.houses.map(h=>`<div class="booking-data" style="text-align:left"><small>${esc(h.name)}</small><strong>${h.today} täna · ${h.pending} ootel</strong><span class="hint">${Number.isFinite(h.newIdeas)?h.newIdeas+' uut ideed · ':''}${h.upcoming} tulevast kasutust</span><a class="text-link" href="${esc(kHouseUrl(h.id))}#login">Ava maja →</a></div>`).join('')}</div></section>`;
 }
 function kLeaderQuickHTML(){
   const own=kWorkspace?.collectives||[];if(!own.length)return '';
@@ -246,7 +293,7 @@ function kIdeasHTML(){
 async function kSaveIdea(id){
   try{
     const result=await post({action:'updateIdea',ideaId:id,status:$('ideaStatus_'+id).value,managerNote:$('ideaNote_'+id).value.trim()});
-    kNotice('ideaMsg_'+id,result.message||'Salvestatud.');await kLoadWorkspace(true);kRenderStaff();
+    kNotice('ideaMsg_'+id,result.message||'Salvestatud.');await kLoadWorkspace(true);await kLoadWorkspaceSection('ideas',true);kRenderStaff();
   }catch(e){kNotice('ideaMsg_'+id,e.message,true);}
 }
 
@@ -330,7 +377,7 @@ async function kSendContract(ev,bookingId){
   ev.preventDefault();const button=$('kContractSend');button.disabled=true;kNotice('kContractMessage','Koostan lepinguversiooni ja saadan kliendile…');
   try{
     const result=await post({action:'sendContract',bookingId,price:Number($('kContractPrice').value),priceNote:$('kContractPriceNote').value.trim(),included:$('kContractIncluded').value.trim(),specialTerms:$('kContractSpecial').value.trim(),cancellationTerms:$('kContractCancellation').value.trim(),generalTerms:$('kContractGeneral').value.trim()});
-    kNotice('kContractMessage',result.message);await kLoadWorkspace(true);setTimeout(()=>{$('kContractDialog')?.close();kRenderStaff();},700);
+    kNotice('kContractMessage',result.message);await kLoadWorkspace(true);await kLoadWorkspaceSection('contracts',true);setTimeout(()=>{$('kContractDialog')?.close();kRenderStaff();},700);
   }catch(e){kNotice('kContractMessage',e.message,true);button.disabled=false;}
 }
 async function kResendContractPdf(contractId){
@@ -344,11 +391,13 @@ function kRenderBookings(){
   const list=kWorkspace.bookings.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||b.status!=='tühistatud')).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   $('kBookingCount').textContent=`Valikus ${list.length} kirjet. Muutmiseks vali kirje juures „Muuda”.`;
   $('kBookingList').innerHTML=list.map(b=>{
-    const contract=kContractForBooking(b.id),status=String(b.status||'').toLowerCase().trim(),external=manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering',active=!['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(status),contractRequired=external&&(b.contractRequired===true||HOUSE.contractMode==='required');
+    const contractsReady=!manager()||kSectionLoaded('contracts'),contract=contractsReady?kContractForBooking(b.id):null,status=String(b.status||'').toLowerCase().trim(),external=manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering',active=!['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(status),contractRequired=external&&(b.contractRequired===true||HOUSE.contractMode==='required');
     const contractInfo=external&&contract?`<p class="hint"><strong>Leping:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
-    const policy=contractRequired&&!contract?'<p class="hint"><strong>Rahvamaja eeskirjade järgi kinnitub see broneering pärast ruumi kasutamise lepingu kinnitamist.</strong></p>':'';
+    const policy=contractRequired&&contractsReady&&!contract?'<p class="hint"><strong>Rahvamaja eeskirjade järgi kinnitub see broneering pärast ruumi kasutamise lepingu kinnitamist.</strong></p>':'';
     let primary='';
-    if(manager()&&external&&active){
+    if(manager()&&external&&active&&!contractsReady){
+      primary='<button class="button outline small" disabled>Kontrollin lepingu olekut…</button>';
+    }else if(manager()&&external&&active){
       if(contract?.status==='kinnitatud'||contract?.status==='saadetud'){
         primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata lepingut':'Vaata / muuda lepingut'}</button>`;
       }else if(contractRequired){
@@ -558,7 +607,7 @@ async function kCreateDirector(ev){
   try{
     const password=$('kDirectorPassword').value,passwordSalt=b64(crypto.getRandomValues(new Uint8Array(24))),passwordVerifier=await verifier(password,passwordSalt,150000);
     await post({action:'createUser',name:$('kDirectorName').value.trim(),email:$('kDirectorEmail').value.trim(),role:'director',organizationId:ORG.id,allowedHouseIds:[],passwordSalt,passwordVerifier});
-    $('kDirectorPassword').value='';await kLoadWorkspace(true);kRenderStaff();kNotice('kDirectorMessage','Juhataja konto on loodud.');
+    $('kDirectorPassword').value='';await kLoadWorkspace(true);await kLoadWorkspaceSection('users',true);kRenderStaff();kNotice('kDirectorMessage','Juhataja konto on loodud.');
   }catch(e){kNotice('kDirectorMessage',e.message,true);button.disabled=false;}
 }
 async function kSetMyPassword(ev){
@@ -569,8 +618,8 @@ async function kSetMyPassword(ev){
     $('kMyNewPassword').value='';kNotice('kMyPasswordMessage','Parool on muudetud.');
   }catch(e){kNotice('kMyPasswordMessage',e.message,true);}finally{button.disabled=false;}
 }
-async function kCreateUser(ev){ev.preventDefault();ev.submitter.disabled=true;try{const passwordSalt=b64(crypto.getRandomValues(new Uint8Array(24))),passwordVerifier=await verifier($('kUserPassword').value,passwordSalt,150000);await post({action:'createUser',name:$('kUserName').value.trim(),email:$('kUserEmail').value.trim(),role:'collective',organizationId:ORG.id,houseId:HOUSE.id,house:HOUSE.name,allowedRoomIds:rooms.map(r=>r.id),passwordSalt,passwordVerifier});$('kUserPassword').value='';await kLoadWorkspace(true);kRenderStaff();}catch(e){kNotice('kUserMessage',e.message,true);ev.submitter.disabled=false;}}
-async function kToggleUser(id,active){if(!confirm(active?'Avada konto uuesti?':'Sulgeda selle juhendaja ligipääs? Kollektiivi andmed jäävad alles.'))return;try{await post({action:'manageUser',userId:id,userAction:'setActive',active});await kLoadWorkspace(true);kRenderStaff();}catch(e){kNotice('kUserListMessage',e.message,true);}}
+async function kCreateUser(ev){ev.preventDefault();ev.submitter.disabled=true;try{const passwordSalt=b64(crypto.getRandomValues(new Uint8Array(24))),passwordVerifier=await verifier($('kUserPassword').value,passwordSalt,150000);await post({action:'createUser',name:$('kUserName').value.trim(),email:$('kUserEmail').value.trim(),role:'collective',organizationId:ORG.id,houseId:HOUSE.id,house:HOUSE.name,allowedRoomIds:rooms.map(r=>r.id),passwordSalt,passwordVerifier});$('kUserPassword').value='';await kLoadWorkspace(true);await kLoadWorkspaceSection('users',true);kRenderStaff();}catch(e){kNotice('kUserMessage',e.message,true);ev.submitter.disabled=false;}}
+async function kToggleUser(id,active){if(!confirm(active?'Avada konto uuesti?':'Sulgeda selle juhendaja ligipääs? Kollektiivi andmed jäävad alles.'))return;try{await post({action:'manageUser',userId:id,userAction:'setActive',active});await kLoadWorkspace(true);await kLoadWorkspaceSection('users',true);kRenderStaff();}catch(e){kNotice('kUserListMessage',e.message,true);}}
 function kActivityHTML(){return `<section class="panel"><h2>Viimased muudatused</h2><p class="hint">Siit näed muudatusi ka siis, kui meiliteade jäi saatmata.</p>${kWorkspace.activity.map(a=>`<article class="booking-row"><h3>${esc(a.action)}</h3><p>${esc(a.title)} · ${a.count} kirjet</p><p class="hint">${esc(a.name)} · ${esc(new Intl.DateTimeFormat('et-EE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Tallinn'}).format(new Date(a.at)))}</p></article>`).join('')||'<p>Muudatusi pole veel registreeritud.</p>'}</section>`;}
 
 function kExtractSchedule(text,groups,today=etDate()){
