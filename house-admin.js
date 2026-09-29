@@ -181,10 +181,10 @@ function kOrganizationSummaryHTML(){
   return `<section class="panel" style="margin:14px 0"><div class="panel-header"><div><span class="eyebrow">Kõik majad</span><h2 style="margin:6px 0 0">${esc(ORG.name)}</h2></div></div><div class="booking-data-grid">${summary.houses.map(h=>`<div class="booking-data" style="text-align:left"><small>${esc(h.name)}</small><strong>${h.today} täna · ${h.pending} ootel</strong><span class="hint">${h.newIdeas} uut ideed · ${h.upcoming} tulevast kasutust</span><a class="text-link" href="${esc(kHouseUrl(h.id))}#login">Ava maja →</a></div>`).join('')}</div></section>`;
 }
 function kLeaderQuickHTML(){
+  const own=kWorkspace?.collectives||[];if(!own.length)return '';
   const future=(kWorkspace?.bookings||[]).filter(b=>b.date>=etDate()&&b.status!=='tühistatud').sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
-  const next=future[0],own=kWorkspace?.collectives?.[0];
-  if(!own)return '';
-  return `<section class="panel" style="margin:14px 0"><span class="eyebrow">Minu kollektiiv</span><h2 style="margin:6px 0 8px">${esc(own.name)}</h2>${next?`<p><strong>Järgmine proov:</strong> ${esc(kDateLabel(next.date))} · ${esc(next.startTime)}–${esc(next.endTime)} · ${esc(next.roomName||'')}</p>`:'<p class="hint">Tulevast proovi kalendris ei ole.</p>'}<div class="row-actions">${next?`<button class="button small" onclick="kOpenEdit('${esc(next.id)}','edit')">Muuda järgmist proovi</button><button class="button outline small" onclick="kOpenEdit('${esc(next.id)}','cancel')">Jäta proov ära</button>`:''}<button class="button outline small" onclick="kStaffTab='collectives';kRenderStaff()">Muuda kollektiivi infot</button></div></section>`;
+  const next=future[0],names=own.map(c=>c.name).join(' · ');
+  return `<section class="panel" style="margin:14px 0"><span class="eyebrow">${own.length===1?'Minu kollektiiv':'Minu kollektiivid'}</span><h2 style="margin:6px 0 8px">${esc(names)}</h2>${next?`<p><strong>Järgmine proov:</strong> ${esc(next.collective||next.publicTitle||'Proov')} · ${esc(kDateLabel(next.date))} · ${esc(next.startTime)}–${esc(next.endTime)} · ${esc(next.roomName||'')}</p>`:'<p class="hint">Tulevast proovi kalendris ei ole.</p>'}<div class="row-actions">${next?`<button class="button small" onclick="kOpenEdit('${esc(next.id)}','edit')">Muuda järgmist proovi</button><button class="button outline small" onclick="kOpenEdit('${esc(next.id)}','cancel')">Jäta proov ära</button>`:''}<button class="button outline small" onclick="kStaffTab='collectives';kRenderStaff()">Muuda kollektiivi infot</button></div></section>`;
 }
 function kIdeasHTML(){
   const ideas=(kWorkspace?.ideas||[]).slice().sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
