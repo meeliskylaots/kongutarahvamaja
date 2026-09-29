@@ -26,6 +26,9 @@ function kRestoreWorkspaceCache(token){
   }catch(e){return false;}
 }
 const kLegacy = {renderStaff,loadCollectives,loadPublicHouse,showCalendarEntryForDate,loadCalendarCollectives,getQuote,updateQuote,renderBookingRoomInfo,submitBooking,post,logout};
+if(!document.getElementById('kDialogUxStyles')){
+  const style=document.createElement('style');style.id='kDialogUxStyles';style.textContent='.k-dialog-sticky{position:sticky;top:-24px;z-index:5;background:var(--paper);padding:14px 0 12px;border-bottom:1px solid var(--line)}.k-dialog-close{width:44px;height:44px;flex:0 0 44px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:28px;line-height:1;cursor:pointer}.k-dialog-close:hover{background:var(--mint)}@media(max-width:720px){.k-dialog-sticky{top:-18px}.k-dialog-close{width:46px;height:46px;flex-basis:46px}.k-dialog .row-actions>.button{min-height:46px}}';document.head.appendChild(style);
+}
 const kPrimaryRoom = () => rooms.find(r=>r.id===HOUSE?.primaryRoomId) || rooms[0] || null;
 const kRoomIsUnpriced = roomId => { const room=rooms.find(r=>r.id===roomId); return !!room && !Number.isFinite(room?.pricing?.community) && !Number.isFinite(room?.pricing?.commercial); };
 const kLegacyActionMap = {houseSaveSchedule:'kongutaSaveSchedule',houseEditUsage:'kongutaEditUsage',houseSaveActivities:'kongutaSaveActivities',houseSaveSettings:'kongutaSaveSettings',houseAssist:'kongutaAssist'};
@@ -308,6 +311,12 @@ async function kSaveIdea(id){
 }
 
 
+function kCloseContractDialog(useHistory=true){
+  const dialog=$('kContractDialog');
+  if(useHistory&&history.state?.kContractDialog){history.back();return;}
+  if(dialog){try{dialog.close();}catch(e){}dialog.remove();}
+}
+window.addEventListener('popstate',()=>{if($('kContractDialog')?.open)kCloseContractDialog(false);});
 const kContractStatusLabels={saadetud:'Ootab kliendi kinnitust',kinnitatud:'Kinnitatud',asendatud:'Asendatud',tühistatud:'Tühistatud'};
 function kContractForBooking(bookingId){
   return (kWorkspace?.contracts||[]).filter(c=>c.bookingId===bookingId).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0]||null;
@@ -359,7 +368,7 @@ function kOpenContract(bookingId){
   const current=kContractForBooking(bookingId);
   $('kContractDialog')?.remove();const dialog=document.createElement('dialog');dialog.id='kContractDialog';dialog.className='k-dialog';dialog.setAttribute('aria-labelledby','kContractHeading');
   if(current?.status==='kinnitatud'){
-    dialog.innerHTML=`<div class="panel-header"><h2 id="kContractHeading">Ruumi kasutamise leping</h2><button type="button" class="text-link" onclick="$('kContractDialog').close()">Sulge</button></div><p>${esc(b.name)} · ${esc(kDateLabel(b.date))} · ${esc(b.roomName)}</p>${kContractViewHTML(current)}<div class="row-actions"><button class="button outline small" onclick="kResendContractPdf('${esc(current.id)}')">Saada PDF uuesti kliendile</button></div><div id="kContractMessage" class="status-msg"></div>`;
+    dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><h2 id="kContractHeading">Ruumi kasutamise leping</h2><button type="button" class="k-dialog-close" aria-label="Sulge leping" onclick="kCloseContractDialog()">×</button></div><p>${esc(b.name)} · ${esc(kDateLabel(b.date))} · ${esc(b.roomName)}</p>${kContractViewHTML(current)}<div class="row-actions"><button class="button outline small" onclick="kResendContractPdf('${esc(current.id)}')">Saada PDF uuesti kliendile</button><button type="button" class="button outline small" onclick="kCloseContractDialog()">Sulge</button></div><div id="kContractMessage" class="status-msg"></div>`;
   }else{
     const room=rooms.find(r=>r.id===b.roomId)||{},price=current?.price??kContractSuggestedPrice(b);
     const included=current?.included||((room.included||[]).join('\n'));
@@ -367,7 +376,7 @@ function kOpenContract(bookingId){
     const cancellation=current?.cancellationTerms||kDefaultContractCancellation();
     const general=current?.generalTerms||kDefaultContractGeneral();
     const priceNote=current?.priceNote||'Lõpliku summa aluseks on käesolev kokkulepe.';
-    dialog.innerHTML=`<div class="panel-header"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise leping</h2></div><button type="button" class="text-link" onclick="$('kContractDialog').close()">Sulge</button></div>
+    dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise leping</h2></div><button type="button" class="k-dialog-close" aria-label="Sulge leping ilma saatmata" onclick="kCloseContractDialog()">×</button></div>
     <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>
     ${kBookingSnapshotHTML(current?.bookingSnapshot||kBookingSnapshotFromBooking(b))}
     ${current?.status==='saadetud'?`<div class="status-msg">Kliendile on juba saadetud versioon ${esc(current.version)}. Uue versiooni saatmisel muutub eelmine link kehtetuks.</div>`:''}
@@ -378,10 +387,14 @@ function kOpenContract(bookingId){
       ${kText('Tühistamise tingimused','kContractCancellation',cancellation,'required maxlength="5000"')}
       ${kText('Üldtingimused','kContractGeneral',general,'required maxlength="10000"')}
       <p class="hint">Saatmisel lukustatakse see lepinguversioon. Klient saab personaalse lingi e-postile ja pärast kinnitamist PDF-koopia.</p>
-      <button class="button" id="kContractSend" type="submit">Saada leping kliendile kinnitamiseks</button><div id="kContractMessage" class="status-msg" aria-live="polite"></div>
+      <div class="row-actions"><button class="button" id="kContractSend" type="submit">Saada leping kliendile kinnitamiseks</button><button class="button outline" type="button" onclick="kCloseContractDialog()">Sulge ilma saatmata</button></div><div id="kContractMessage" class="status-msg" aria-live="polite"></div>
     </form>`;
   }
-  document.body.appendChild(dialog);dialog.showModal();
+  document.body.appendChild(dialog);
+  dialog.addEventListener('cancel',ev=>{ev.preventDefault();kCloseContractDialog();});
+  dialog.addEventListener('click',ev=>{if(ev.target===dialog)kCloseContractDialog();});
+  history.pushState({...history.state,kContractDialog:true},'',location.href);
+  dialog.showModal();
 }
 async function kSendContract(ev,bookingId){
   ev.preventDefault();const button=$('kContractSend');button.disabled=true;kNotice('kContractMessage','Koostan lepinguversiooni ja saadan kliendile…');
@@ -609,7 +622,7 @@ async function kSaveImage(ev,type,id){ev.preventDefault();ev.submitter.disabled=
 function kUsersHTML(){
   const platform=staffUser?.role==='platform_admin';
   const directors=(kWorkspace.users||[]).filter(u=>u.role==='director'&&String(u.organizationId||'')===ORG.id);
-  const directorSection=platform?`<section class="panel"><h2>${esc(ORG.name)} juhataja konto</h2><p class="hint">Juhataja näeb ja haldab kõiki selle organisatsiooni maju, kuid mitte teiste organisatsioonide andmeid.</p><details class="k-activity"><summary>Lisa organisatsiooni juhataja</summary><form class="k-activity-fields" onsubmit="kCreateDirector(event)">${kField('Nimi','kDirectorName','','text','required minlength="2" maxlength="100"')}${kField('E-post','kDirectorEmail','','email','required')}${kField('Algne parool','kDirectorPassword','','password','required minlength="12" autocomplete="new-password"')}<p class="hint">Vähemalt 12 märki. Edasta algne parool juhatajale turvalise kanali kaudu.</p><button class="button" type="submit">Loo juhataja konto</button><div id="kDirectorMessage" class="status-msg" aria-live="polite"></div></form></details>${directors.map(u=>`<div class="booking-row"><h3>${esc(u.name)}</h3><p>${esc(u.email)} · ${u.active?'Aktiivne':'Suletud'}</p><button class="button outline small" onclick="kToggleUser('${esc(u.id)}',${!u.active})">${u.active?'Sulge konto':'Ava konto'}</button></div>`).join('')||'<p class="muted">Selle organisatsiooni juhataja kontot pole veel loodud.</p>'}</section>`:'';
+  const directorSection=platform?`<section class="panel"><h2>${esc(ORG.name)} juhataja konto</h2><p class="hint">Juhataja näeb ja haldab kõiki selle organisatsiooni maju, kuid mitte teiste organisatsioonide andmeid.</p><details class="k-activity"><summary>Lisa organisatsiooni juhataja</summary><form class="k-activity-fields" onsubmit="kCreateDirector(event)">${kField('Nimi','kDirectorName','','text','required minlength="2" maxlength="100"')}${kField('E-post','kDirectorEmail','','email','required')}${kField('Algne parool','kDirectorPassword','','password','required minlength="12" autocomplete="new-password"')}<p class="hint">Vähemalt 12 märki. Edasta algne parool juhatajale turvalise kanali kaudu.</p><button class="button" type="submit">Loo juhataja konto</button><div id="kDirectorMessage" class="status-msg" aria-live="polite"></div></form></details>${directors.map(u=>`<div class="booking-row"><h3>${esc(u.name)}</h3><p>${esc(u.email)} · ${u.active?'Aktiivne':'Suletud'}</p><div class="row-actions"><button class="button outline small" onclick="kToggleUser('${esc(u.id)}',${!u.active})">${u.active?'Sulge konto':'Ava konto'}</button></div><details class="k-activity"><summary>Määra uus parool</summary><form class="k-activity-fields" onsubmit="kSetUserPassword(event,'${esc(u.id)}')"><label class="field"><span>Uus parool</span><input data-reset-password type="password" required minlength="12" autocomplete="new-password"></label><p class="hint">Vähemalt 12 märki. Parooli muutmisel aeguvad kasutaja varasemad sessioonid.</p><button class="button small" type="submit">Salvesta uus parool</button><div class="status-msg" data-reset-message aria-live="polite"></div></form></details></div>`).join('')||'<p class="muted">Selle organisatsiooni juhataja kontot pole veel loodud.</p>'}</section>`:'';
   const passwordSection=`<section class="panel"><h2>Minu parool</h2><details class="k-activity"><summary>Muuda oma parooli</summary><form class="k-activity-fields" onsubmit="kSetMyPassword(event)">${kField('Uus parool','kMyNewPassword','','password','required minlength="12" autocomplete="new-password"')}<button class="button" type="submit">Muuda parooli</button><div id="kMyPasswordMessage" class="status-msg" aria-live="polite"></div></form></details></section>`;
   return directorSection+`<section class="panel"><h2>Juhendajate kontod</h2><p class="hint">Loo konto ning seo see seejärel vaates „Kollektiivid” ühe või mitme kollektiiviga. Konto loomine meili ei saada.</p><details class="k-activity"><summary>Lisa juhendaja konto</summary><form class="k-activity-fields" onsubmit="kCreateUser(event)">${kField('Nimi','kUserName','','text','required minlength="2" maxlength="100"')}${kField('E-post','kUserEmail','','email','required')}${kField('Algne parool','kUserPassword','','password','required minlength="12" autocomplete="new-password"')}<p class="hint">Vähemalt 12 märki. Edasta parool juhendajale turvalise kanali kaudu.</p><button class="button" type="submit">Loo konto</button><div id="kUserMessage" class="status-msg" aria-live="polite"></div></form></details>${kWorkspace.users.filter(u=>u.role==='collective'&&((u.house?.toLowerCase().includes((HOUSE.shortName||HOUSE.name).toLowerCase())||(u.allowedRoomIds||[]).some(id=>rooms.some(r=>r.id===id))||kWorkspace.collectives.some(c=>c.leaderUserId===u.id)))).map(u=>`<div class="booking-row"><h3>${esc(u.name)}</h3><p>${esc(u.email)} · ${u.active?'Aktiivne':'Suletud'}</p><p class="hint">${esc(kWorkspace.collectives.filter(c=>c.leaderUserId===u.id).map(c=>c.name).join(', ')||'Kollektiiviga sidumata')}</p><button class="button outline small" onclick="kToggleUser('${esc(u.id)}',${!u.active})">${u.active?'Sulge konto':'Ava konto'}</button></div>`).join('')}<div id="kUserListMessage" class="status-msg" aria-live="polite"></div></section>`+passwordSection;}
 async function kCreateDirector(ev){
@@ -619,6 +632,17 @@ async function kCreateDirector(ev){
     await post({action:'createUser',name:$('kDirectorName').value.trim(),email:$('kDirectorEmail').value.trim(),role:'director',organizationId:ORG.id,allowedHouseIds:[],passwordSalt,passwordVerifier});
     $('kDirectorPassword').value='';await kLoadWorkspace(true);await kLoadWorkspaceSection('users',true);kRenderStaff();kNotice('kDirectorMessage','Juhataja konto on loodud.');
   }catch(e){kNotice('kDirectorMessage',e.message,true);button.disabled=false;}
+}
+async function kSetUserPassword(ev,userId){
+  ev.preventDefault();const form=ev.currentTarget,button=ev.submitter,input=form.querySelector('[data-reset-password]'),message=form.querySelector('[data-reset-message]');
+  button.disabled=true;message.classList.remove('error');message.textContent='Salvestan uut parooli…';
+  try{
+    const password=input.value;if(password.length<12)throw new Error('Parool peab olema vähemalt 12 märki.');
+    const passwordSalt=b64(crypto.getRandomValues(new Uint8Array(24))),passwordVerifier=await verifier(password,passwordSalt,150000);
+    await post({action:'manageUser',userId,userAction:'setPassword',passwordSalt,passwordVerifier});
+    input.value='';message.textContent='Uus parool on salvestatud. Kasutaja saab nüüd sellega sisse logida.';
+  }catch(e){message.textContent=e.message||'Parooli muutmine ebaõnnestus.';message.classList.add('error');}
+  finally{button.disabled=false;}
 }
 async function kSetMyPassword(ev){
   ev.preventDefault();const button=ev.submitter;button.disabled=true;
