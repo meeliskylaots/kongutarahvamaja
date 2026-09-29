@@ -257,8 +257,25 @@ renderStaff=async function(){
   if(!staffUser)return;
   $('loginForm').classList.add('hidden');$('staffPanel').classList.remove('hidden');$('staffPanel').parentElement.style.maxWidth='none';$('staffWelcome').textContent=`Tere, ${staffUser.name}`;
   if(kWorkspace){kRenderStaff();return;}
-  $('staffContent').innerHTML='<p class="loading">Laadin töölauda esimest korda…</p>';
-  try{await kLoadWorkspace();kRenderStaff();}catch(e){if(e.message==='SERVER_UPDATE_REQUIRED'){await kLegacy.renderStaff();$('staffPanel').parentElement.style.maxWidth='none';$('staffContent').insertAdjacentHTML('afterbegin','<div class="status-msg">Haldusuuenduse serveriosa ootab ühendamist. Seni saad kasutada senist töölauda.</div>');}else $('staffContent').innerHTML=`<p class="status-msg error">${esc(e.message)}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;}
+  $('staffContent').innerHTML='<p class="loading">Laadin töölauda…</p>';
+  try{
+    await kLoadWorkspace();kRenderStaff();
+  }catch(e){
+    const msg=String(e?.message||'');
+    if(e.message==='SERVER_UPDATE_REQUIRED'||/aegus|timeout|Andmete laadimine ebaõnnestus/i.test(msg)){
+      $('staffContent').innerHTML='<p class="loading">Avan kergema töövaate…</p>';
+      try{
+        await kLegacy.renderStaff();
+        $('staffPanel').parentElement.style.maxWidth='none';
+        $('staffContent').insertAdjacentHTML('afterbegin','<div class="status-msg"><strong>Siseveeb on avatud varurežiimis.</strong> Serveri uuem versioon pole veel kasutusel või vastas liiga aeglaselt. Põhitoiminguid saad kasutada; täisvaade taastub pärast serveriuuendust.</div>');
+        return;
+      }catch(fallbackError){
+        $('staffContent').innerHTML=`<p class="status-msg error">${esc(fallbackError.message||msg||'Töölauda ei saanud laadida.')}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;
+        return;
+      }
+    }
+    $('staffContent').innerHTML=`<p class="status-msg error">${esc(msg||'Töölauda ei saanud laadida.')}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;
+  }
 };
 async function kReloadStaff(){
   if(!staffUser)return;
