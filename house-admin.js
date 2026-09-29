@@ -86,6 +86,9 @@ function kApplyPublic(){
   const instant=HOUSE.publicBookingMode==='instant';
   $('submitBookingBtn').textContent=instant?'Broneeri ruum':'Saada broneeringusoov →';
   $('bookingConfirmationHint').textContent=instant?'Vaba aeg kinnitatakse kohe pärast kalendri ja puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.':'Päring saadetakse rahvamajale kinnitamiseks. Avalikus kalendris näidatakse menetluses aega neutraalselt, ilma sinu kontaktandmeteta.';
+  if(!$('wantsContract')&&$('bookingConfirmationHint')){
+    $('bookingConfirmationHint').insertAdjacentHTML('beforebegin','<label class="service-option" style="margin-top:14px"><input id="wantsContract" type="checkbox"><span><strong>Soovin kirjalikku ruumi kasutamise kokkulepet</strong><small class="muted" style="display:block;margin-top:3px">Kui valid selle, saab rahvamaja saata sulle broneeringu andmetega veebikokkuleppe kinnitamiseks. See ei ole broneerimise eeltingimus.</small></span></label>');
+  }
   if($('eventBookingHint'))$('eventBookingHint').textContent=instant?'Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.':'Vali sobiv aeg ja saada ruumi kasutamise soov. Rahvamaja kinnitab broneeringu eraldi.';
   if(HOUSE.pricingMode==='room'){
     const typeField=$('clientType')?.closest('.field');if(typeField)typeField.style.display='none';
@@ -142,7 +145,19 @@ renderBookingRoomInfo=function(){
 };
 submitBooking=async function(ev){
   if(!kSite)return kLegacy.submitBooking(ev);ev.preventDefault();const button=$('submitBookingBtn');if(button.disabled)return;button.disabled=true;kNotice('bookingMessage',HOUSE.publicBookingMode==='instant'?'Kontrollin ja kinnitan broneeringut…':'Kontrollin aega ja saadan broneeringusoovi…');
-  try{const result=await post({action:'submitSiteBooking',roomId:$('bookRoom').value,date:$('bookDate').value,startTime:$('startTime').value,endTime:$('endTime').value,clientType:$('clientType').value,clientName:$('clientName').value.trim(),clientEmail:$('clientEmail').value.trim(),clientPhone:$('clientPhone').value.trim(),eventDescription:$('eventDescription').value.trim(),selectedServiceIds:[['serviceSound','sound'],['serviceLights','lights'],['serviceTechnician','technician']].filter(([id])=>$(id).checked).map(([,id])=>id)});kNotice('bookingMessage',`${result.message} Broneeringu number: ${result.bookingId}. ${result.warning||''}`);$('bookingForm').reset();$('bookDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)}catch(e){kNotice('bookingMessage',e.message,true);button.disabled=false;}
+  try{
+    const q=getQuote();
+    const result=await post({
+      action:'submitSiteBooking',roomId:$('bookRoom').value,date:$('bookDate').value,startTime:$('startTime').value,endTime:$('endTime').value,
+      clientType:$('clientType').value,clientName:$('clientName').value.trim(),clientEmail:$('clientEmail').value.trim(),clientPhone:$('clientPhone').value.trim(),
+      eventDescription:$('eventDescription').value.trim(),wantsContract:!!$('wantsContract')?.checked,
+      selectedServiceIds:[['serviceSound','sound'],['serviceLights','lights'],['serviceTechnician','technician']].filter(([id])=>$(id).checked).map(([,id])=>id),
+      selectedServices:(q.selected||[]).map(x=>({label:x.label,total:Number(x.total)||0})),
+      roomCost:Number(q.roomCost)||0,servicesTotal:Number(q.servicesTotal)||0,estimatedTotal:Number(q.total)||0,
+      quoteNote:[q.outdoor?'Valitud ruumi hind täpsustatakse eraldi.':'',HOUSE.servicesMode==='request'?'Tehnika ja muud lisavajadused hinnastab rahvamaja eraldi.':'','Broneerimisel kuvatud hinnainfo on esialgne; lõpliku hinna kinnitab rahvamaja.'].filter(Boolean).join(' ')
+    });
+    kNotice('bookingMessage',`${result.message} Broneeringu number: ${result.bookingId}. ${result.warning||''}`);$('bookingForm').reset();$('bookDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)
+  }catch(e){kNotice('bookingMessage',e.message,true);button.disabled=false;}
 };
 
 async function kLoadWorkspace(force=false){
@@ -216,8 +231,23 @@ function kDefaultContractGeneral(){
 function kDefaultContractCancellation(){
   return 'Tühistamisest teavitatakse rahvamaja esimesel võimalusel. Tühistamisega seotud tasud või kulud kehtivad ainult siis, kui need on käesolevas kokkuleppes eraldi kokku lepitud.';
 }
+function kBookingSnapshotFromBooking(b){
+  return {eventType:b.eventType||'',description:b.notes||'',clientType:b.clientType||'',wantsContract:b.wantsContract===true,selectedServicesText:b.selectedServicesText||'',roomCost:Number(b.roomCost||0),servicesTotal:Number(b.servicesTotal||0),estimatedTotal:Number(b.estimatedTotal||0),quoteNote:b.disclaimer||''};
+}
+function kBookingSnapshotHTML(snap={}){
+  const rows=[
+    ['Kasutuse liik',snap.eventType||'—'],
+    ['Kliendi kirjeldus',snap.description||'—'],
+    ['Kasutuse laad',snap.clientType||'—'],
+    ['Valitud teenused',snap.selectedServicesText||'Lisateenuseid ei valitud'],
+    ['Broneerimisel näidatud ruumihind',kMoney(Number(snap.roomCost||0))+' €'],
+    ['Broneerimisel näidatud teenused',kMoney(Number(snap.servicesTotal||0))+' €'],
+    ['Broneerimisel näidatud koguhind',kMoney(Number(snap.estimatedTotal||0))+' €']
+  ];
+  return `<section class="k-review" style="margin:16px 0"><h3>Broneeringu algne sisend</h3><div class="booking-data-grid">${rows.map(([label,value])=>`<div class="booking-data"><small>${esc(label)}</small><strong style="white-space:pre-wrap">${esc(value)}</strong></div>`).join('')}</div>${snap.quoteNote?`<p class="hint">${esc(snap.quoteNote)}</p>`:''}</section>`;
+}
 function kContractViewHTML(c){
-  return `<div class="status-msg ${c.status==='kinnitatud'?'':'error'}"><strong>${esc(kContractStatusLabels[c.status]||c.status)}</strong>${c.acceptedAt?` · ${esc(new Intl.DateTimeFormat('et-EE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(c.acceptedAt)))}`:''}</div>
+  return `${kBookingSnapshotHTML(c.bookingSnapshot||{})}<div class="status-msg ${c.status==='kinnitatud'?'':'error'}"><strong>${esc(kContractStatusLabels[c.status]||c.status)}</strong>${c.acceptedAt?` · ${esc(new Intl.DateTimeFormat('et-EE',{dateStyle:'medium',timeStyle:'short'}).format(new Date(c.acceptedAt)))}`:''}</div>
   <div class="booking-data-grid">
     <div class="booking-data"><small>Lepingu ID</small><strong>${esc(c.id)}</strong></div>
     <div class="booking-data"><small>Versioon</small><strong>${esc(c.version)}</strong></div>
@@ -245,6 +275,7 @@ function kOpenContract(bookingId){
     const priceNote=current?.priceNote||'Lõpliku summa aluseks on käesolev kokkulepe.';
     dialog.innerHTML=`<div class="panel-header"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise kokkulepe</h2></div><button type="button" class="text-link" onclick="$('kContractDialog').close()">Sulge</button></div>
     <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>
+    ${kBookingSnapshotHTML(current?.bookingSnapshot||kBookingSnapshotFromBooking(b))}
     ${current?.status==='saadetud'?`<div class="status-msg">Kliendile on juba saadetud versioon ${esc(current.version)}. Uue versiooni saatmisel muutub eelmine link kehtetuks.</div>`:''}
     <form id="kContractForm" onsubmit="kSendContract(event,'${esc(b.id)}')">
       <div class="field-grid">${kField('Kokkulepitud hind €','kContractPrice',price,'number','required min="0" max="1000000" step="0.01"')}${kField('Hinna märkus','kContractPriceNote',priceNote,'text','maxlength="1200"')}</div>
@@ -278,18 +309,27 @@ function kRenderBookings(){
   $('kBookingList').innerHTML=list.map(b=>{
     const contract=kContractForBooking(b.id),status=String(b.status||'').toLowerCase().trim(),external=manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering',active=!['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(status);
     const contractInfo=external&&contract?`<p class="hint"><strong>Kokkulepe:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
+    const wantsInfo=external&&b.wantsContract&&!contract?'<p class="hint"><strong>Klient soovib kirjalikku kokkulepet.</strong></p>':'';
     let primary='';
-    if(manager()&&external){
-      if(contract?.status==='kinnitatud'||contract?.status==='saadetud')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata kokkulepet':'Vaata / muuda kokkulepet'}</button>`;
-      else if(active)primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta kokkulepe</button>`;
-    }else if(manager()&&['ootel','pending'].includes(status))primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
+    if(manager()&&external&&active){
+      if(contract?.status==='kinnitatud'||contract?.status==='saadetud'){
+        primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata kokkulepet':'Vaata / muuda kokkulepet'}</button>`;
+      }else{
+        const pending=['ootel','pending'].includes(status);
+        const confirm=pending?`<button class="button ${b.wantsContract?'outline':''} small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita broneering</button>`:'';
+        const agreement=`<button class="button ${b.wantsContract?'':'outline'} small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
+        primary=confirm+agreement;
+      }
+    }else if(manager()&&['ootel','pending'].includes(status)){
+      primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
+    }
     const actions=!active
       ?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`
       :`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
-    return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
+    return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${wantsInfo}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
   }).join('')||'<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
 }
-async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await renderStaff();}catch(e){alert(e.message);}}
+async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await kLoadWorkspace(true);kRenderStaff();}catch(e){alert(e.message);}}
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
 function kIsoWeekday(date){return ((new Date(date+'T12:00:00Z').getUTCDay()+6)%7)+1;}
 async function kNewSchedule(date=etDate()){
