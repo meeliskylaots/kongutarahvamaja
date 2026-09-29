@@ -425,35 +425,68 @@ async function kResendContractPdf(contractId){
   try{const result=await post({action:'resendContractPdf',contractId});kNotice('kContractMessage',result.message);}catch(e){kNotice('kContractMessage',e.message,true);}
 }
 
-function kBookingsHTML(){return `<section class="panel"><div class="panel-header"><h2>Proovid ja sündmused</h2><button class="button small" onclick="kNewSchedule()">${manager()?'Lisa proov või üritus':'Lisa oma kollektiivi proov'}</button></div><div class="k-filter-grid">${kField('Alates','kListFrom',etDate(),'date')}${kField('Kuni','kListTo',kSeasonRange(etDate()).end,'date')}<label class="field"><span>Kollektiiv</span><select id="kListCollective"><option value="">Kõik</option>${kWorkspace.collectives.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label><label class="service-option"><input type="checkbox" id="kShowCancelled"><span>Näita tühistatud kirjeid</span></label></div><button class="button outline small" onclick="kRenderBookings()">Näita valikut</button><p id="kBookingCount" class="hint"></p><div id="kBookingList" class="k-booking-list"></div></section>`;}
+
+let kBookingViewMode='overview';
+try{kBookingViewMode=sessionStorage.getItem('culturehub_booking_view_v1:'+ORG.id+':'+HOUSE.id)||'overview';}catch(e){}
+function kSetBookingView(mode){
+  kBookingViewMode=['overview','series','all'].includes(mode)?mode:'overview';
+  try{sessionStorage.setItem('culturehub_booking_view_v1:'+ORG.id+':'+HOUSE.id,kBookingViewMode);}catch(e){}
+  kRenderBookings();
+}
+function kBookingsHTML(){return `<section class="panel"><div class="panel-header"><div><h2>Proovid ja sündmused</h2><p class="hint">Korduvad proovid on vaikimisi koondatud üheks graafikuks.</p></div><button class="button small" onclick="kNewSchedule()">${manager()?'Lisa proov või üritus':'Lisa oma kollektiivi proov'}</button></div>
+<nav class="k-tabs" aria-label="Kalendrivaate valik"><button class="button ${kBookingViewMode==='overview'?'':'outline'} small" onclick="kSetBookingView('overview')">Ülevaade</button><button class="button ${kBookingViewMode==='series'?'':'outline'} small" onclick="kSetBookingView('series')">Korduvad proovid</button><button class="button ${kBookingViewMode==='all'?'':'outline'} small" onclick="kSetBookingView('all')">Kõik kirjed</button></nav>
+<div class="k-filter-grid">${kField('Alates','kListFrom',etDate(),'date')}${kField('Kuni','kListTo',kSeasonRange(etDate()).end,'date')}<label class="field"><span>Kollektiiv</span><select id="kListCollective"><option value="">Kõik</option>${kWorkspace.collectives.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label><label class="service-option"><input type="checkbox" id="kShowCancelled"><span>Näita tühistatud kirjeid</span></label></div><button class="button outline small" onclick="kRenderBookings()">Näita valikut</button><p id="kBookingCount" class="hint"></p><div id="kBookingList" class="k-booking-list"></div></section>`;}
+function kBookingExternal(b){return manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering';}
+function kBookingActive(b){return !['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(String(b.status||'').toLowerCase().trim());}
+function kBookingNeedsAttention(b){
+  const status=String(b.status||'').toLowerCase().trim(),contract=kSectionLoaded('contracts')?kContractForBooking(b.id):null;
+  return ['ootel','pending'].includes(status)||(kBookingExternal(b)&&b.contractRequired===true&&(!contract||contract.status==='saadetud'));
+}
+function kBookingItemHTML(b){
+  const contractsReady=!manager()||kSectionLoaded('contracts'),contract=contractsReady?kContractForBooking(b.id):null,status=String(b.status||'').toLowerCase().trim(),external=kBookingExternal(b),active=kBookingActive(b),contractRequired=external&&(b.contractRequired===true||HOUSE.contractMode==='required');
+  const contractInfo=external&&contract?`<p class="hint"><strong>Leping:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
+  const policy=contractRequired&&contractsReady&&!contract?'<p class="hint"><strong>Rahvamaja eeskirjade järgi kinnitub see broneering pärast ruumi kasutamise lepingu kinnitamist.</strong></p>':'';
+  let primary='';
+  if(manager()&&external&&active&&!contractsReady)primary='<button class="button outline small" disabled>Kontrollin lepingu olekut…</button>';
+  else if(manager()&&external&&active){
+    if(contract?.status==='kinnitatud'||contract?.status==='saadetud')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata lepingut':'Vaata / muuda lepingut'}</button>`;
+    else if(contractRequired)primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
+    else{const pending=['ootel','pending'].includes(status);primary=(pending?`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita broneering</button>`:'')+`<button class="button outline small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;}
+  }else if(manager()&&['ootel','pending'].includes(status))primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
+  const actions=!active?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
+  return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
+}
+function kSeriesGroups(list){
+  const map=new Map();list.filter(b=>b.seriesId&&b.collectiveId).forEach(b=>{if(!map.has(b.seriesId))map.set(b.seriesId,[]);map.get(b.seriesId).push(b);});
+  return [...map.entries()].map(([seriesId,items])=>({seriesId,items:items.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime))})).sort((a,b)=>(a.items[0]?.date||'').localeCompare(b.items[0]?.date||''));
+}
+function kSeriesSummaryHTML(group){
+  const items=group.items,active=items.filter(kBookingActive),sample=active[0]||items[0],next=active.find(b=>b.date>=etDate())||active[0]||items[0],first=active[0]||items[0],last=active.at(-1)||items.at(-1);
+  const weekday=['','esmaspäeviti','teisipäeviti','kolmapäeviti','neljapäeviti','reedeti','laupäeviti','pühapäeviti'][kIsoWeekday(sample.date)]||'iga nädal',cancelled=items.length-active.length;
+  const details=items.map(b=>`<div class="booking-row" style="margin:10px 0"><div class="booking-row-top"><div><strong>${esc(kDateLabel(b.date))}</strong><p>${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p></div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${kBookingActive(b)?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`}</div></div>`).join('');
+  return `<article class="booking-row"><div class="booking-row-top"><div><span class="eyebrow">Korduv proov</span><h3>${esc(sample.collective||sample.publicTitle||'Proovigraafik')}</h3><p><strong>${esc(weekday)}</strong> · ${esc(sample.startTime)}–${esc(sample.endTime)} · ${esc(sample.roomName)}</p><p class="hint">${esc(kDateLabel(first.date))} – ${esc(kDateLabel(last.date))} · ${active.length} aktiivset korda${cancelled?' · '+cancelled+' tühistatud':''}</p>${next&&next.date>=etDate()?`<p class="hint"><strong>Järgmine:</strong> ${esc(kDateLabel(next.date))} · ${esc(next.startTime)}</p>`:''}</div><span class="badge good">graafik</span></div><div class="row-actions"><button class="button small" onclick="kOpenSeriesEdit('${esc(group.seriesId)}')">Muuda graafikut</button></div><details class="k-activity"><summary>Näita kõiki kordi (${items.length})</summary><div class="k-activity-fields">${details}</div></details></article>`;
+}
+function kOpenSeriesEdit(seriesId){
+  const items=(kWorkspace.bookings||[]).filter(b=>b.seriesId===seriesId&&kBookingActive(b)).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime)),target=items.find(b=>b.date>=etDate())||items[0];if(!target)return;
+  kOpenEdit(target.id,'edit');setTimeout(()=>{if($('kEditScope'))$('kEditScope').value='following';},0);
+}
 function kRenderBookings(){
-  const from=$('kListFrom').value,to=$('kListTo').value,group=$('kListCollective').value,cancelled=$('kShowCancelled').checked;
-  const list=kWorkspace.bookings.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||b.status!=='tühistatud')).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
-  $('kBookingCount').textContent=`Valikus ${list.length} kirjet. Muutmiseks vali kirje juures „Muuda”.`;
-  $('kBookingList').innerHTML=list.map(b=>{
-    const contractsReady=!manager()||kSectionLoaded('contracts'),contract=contractsReady?kContractForBooking(b.id):null,status=String(b.status||'').toLowerCase().trim(),external=manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering',active=!['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(status),contractRequired=external&&(b.contractRequired===true||HOUSE.contractMode==='required');
-    const contractInfo=external&&contract?`<p class="hint"><strong>Leping:</strong> ${esc(kContractStatusLabels[contract.status]||contract.status)} · v${esc(contract.version)}${contract.acceptedName?' · '+esc(contract.acceptedName):''}</p>`:'';
-    const policy=contractRequired&&contractsReady&&!contract?'<p class="hint"><strong>Rahvamaja eeskirjade järgi kinnitub see broneering pärast ruumi kasutamise lepingu kinnitamist.</strong></p>':'';
-    let primary='';
-    if(manager()&&external&&active&&!contractsReady){
-      primary='<button class="button outline small" disabled>Kontrollin lepingu olekut…</button>';
-    }else if(manager()&&external&&active){
-      if(contract?.status==='kinnitatud'||contract?.status==='saadetud'){
-        primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata lepingut':'Vaata / muuda lepingut'}</button>`;
-      }else if(contractRequired){
-        primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
-      }else{
-        const pending=['ootel','pending'].includes(status);
-        primary=(pending?`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita broneering</button>`:'')+`<button class="button outline small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
-      }
-    }else if(manager()&&['ootel','pending'].includes(status)){
-      primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
-    }
-    const actions=!active
-      ?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`
-      :`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
-    return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
-  }).join('')||'<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
+  const from=$('kListFrom')?.value||etDate(),to=$('kListTo')?.value||kSeasonRange(etDate()).end,group=$('kListCollective')?.value||'',cancelled=!!$('kShowCancelled')?.checked;
+  const list=(kWorkspace.bookings||[]).filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||kBookingActive(b))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const seriesGroups=kSeriesGroups(list),seriesIds=new Set(seriesGroups.map(g=>g.seriesId)),singles=list.filter(b=>!seriesIds.has(b.seriesId)),attention=singles.filter(kBookingNeedsAttention),regularSingles=singles.filter(b=>!kBookingNeedsAttention(b));
+  let html='';
+  if(kBookingViewMode==='all'){
+    $('kBookingCount').textContent=`Valikus ${list.length} üksikkirjet. Siin on nähtavad ka kõik korduvate proovide kuupäevad.`;html=list.map(kBookingItemHTML).join('');
+  }else if(kBookingViewMode==='series'){
+    $('kBookingCount').textContent=`${seriesGroups.length} korduvat proovigraafikut. Detailid avanevad graafiku kaardilt.`;html=seriesGroups.map(kSeriesSummaryHTML).join('')||'<p class="muted">Selles ajavahemikus korduvaid proove pole.</p>';
+  }else{
+    $('kBookingCount').textContent=`${attention.length} tähelepanu vajavat · ${seriesGroups.length} korduvat graafikut · ${regularSingles.length} muud üksikkirjet.`;
+    if(attention.length)html+=`<div class="panel-header" style="margin-top:14px"><h3>Tähelepanu vajavad</h3><span class="badge">${attention.length}</span></div>`+attention.map(kBookingItemHTML).join('');
+    if(seriesGroups.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Korduvad proovid</h3><span class="badge">${seriesGroups.length} graafikut</span></div>`+seriesGroups.map(kSeriesSummaryHTML).join('');
+    if(regularSingles.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Ühekordsed sündmused ja kasutused</h3><span class="badge">${regularSingles.length}</span></div>`+regularSingles.map(kBookingItemHTML).join('');
+    if(!html)html='<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
+  }
+  $('kBookingList').innerHTML=html;
 }
 async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);if(manager())await kLoadWorkspaceSection('contracts',true);kRenderStaff();}catch(e){alert(e.message);}}
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
