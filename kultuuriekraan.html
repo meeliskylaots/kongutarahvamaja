@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#183c43">
-  <meta name="description" content="Elva piirkonna sündmused Konguta Rahvamaja kultuuriekraanil.">
-  <title>Elva kultuuriekraan | Konguta Rahvamaja</title>
+  <meta name="description" content="Elva piirkonna kultuurisündmused ühes vaates.">
+  <title>Elva kultuuriekraan | Kultuuripesa</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="index.html">Konguta Rahvamaja</a>
+    <a id="cultureBrand" class="brand" href="index.html">Kultuuripesa</a>
     <a id="cultureBack" class="back" href="index.html#home">← Tagasi kodulehele</a>
   </header>
   <main class="content">
@@ -30,8 +30,16 @@
     <p class="fallback">Kui kultuuriekraan siin ei lae, <a href="https://meeliskylaots.github.io/elvakultuur/" target="_blank" rel="noopener">ava see eraldi vahekaardil</a>.</p>
   </main>
 <script>
-    const from=new URLSearchParams(location.search).get('from');
-    if(['home','events','booking','activities','rooms','contact','login'].includes(from)){const back=document.getElementById('cultureBack');back.href='index.html#'+from;back.textContent='← Tagasi';}
+    const params=new URLSearchParams(location.search),from=params.get('from'),house=params.get('house')||'konguta';
+    const houses={
+      konguta:{file:'index.html',name:'Konguta Rahvamaja'},
+      rongu:{file:'rongu.html',name:'Rõngu Rahvamaja'},
+      valguta:{file:'valguta.html',name:'Valguta Seltsimaja'}
+    };
+    const source=houses[house]||houses.konguta,brand=document.getElementById('cultureBrand'),back=document.getElementById('cultureBack');
+    brand.href=source.file;brand.textContent=source.name;
+    back.href=source.file+'#'+(['home','events','booking','activities','rooms','ideas','contact','login'].includes(from)?from:'home');
+    back.textContent='← Tagasi';
   </script>
 </body>
 </html>
