@@ -635,7 +635,7 @@
     async function changeStatus(id,status){if(!confirm(status==='kinnitatud'?'Kinnitad selle päringu?':'Lükkad selle päringu tagasi?'))return;try{await post({action:'updateStatus',bookingId:id,status});await renderStaff()}catch(e){alert(e.message||'Muudatuse salvestamine ebaõnnestus.')}}
     async function requestReschedule(){try{const result=await post({action:'requestReschedule',bookingId:$('rescheduleBooking').value,roomId:$('newRoom').value,date:$('newDate').value,startTime:$('newStart').value,endTime:$('newEnd').value});setMessage('rescheduleMsg',result.message||'Muutmispalve saadeti juhatajale.');await renderStaff()}catch(e){setMessage('rescheduleMsg',e.message,true)}}
   </script>
-  <script src="house-admin.js?v=21"></script>
+  <script src="house-admin.js?v=22"></script>
   <script>
     applyHouseConfig();$('eventDate').value=etDate();eventCalendarMonth=etDate().slice(0,7);bookingCalendarMonth=etDate().slice(0,7);$('bookDate').min=etDate();$('bookDate').value=etDate();$('submitBookingBtn').disabled=true;updateQuote();renderBookingRoomInfo();renderBookingCalendar();$('bookDate').addEventListener('change',()=>{bookingCalendarMonth=$('bookDate').value.slice(0,7);bookingDayEntries=[];renderBookingCalendar();loadBookingSchedule()});$('bookRoom').addEventListener('change',()=>{bookingDayEntries=[];renderBookingRoomInfo();loadBookingSchedule()});$('clientType').addEventListener('change',()=>{updateQuote();renderBookingRoomInfo()});['startTime','endTime'].forEach(id=>$(id).addEventListener('change',()=>{updateQuote();checkAvailability()}));
     window.addEventListener('focus',()=>refreshVisibleAvailability());
