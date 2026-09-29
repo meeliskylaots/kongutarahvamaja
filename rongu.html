@@ -50,9 +50,9 @@
       <a class="brand" href="#home" aria-label="Rõngu Rahvamaja avaleht" onclick="showView('home');return false">
         <span class="brand-mark">K</span><span class="brand-copy"><strong>Rõngu Rahvamaja</strong><small>Rõngu · Elva vald</small></span>
       </a>
-      <select class="house-switcher" aria-label="Vali Rõngu Rahvamaja maja" onchange="if(this.value){const base=this.value.split('#')[0];location.href=base+(location.hash||'#home')}">
-        <option value="rongu.html#home" selected>Rõngu Rahvamaja</option>
-        <option value="valguta.html#home">Valguta Seltsimaja</option>
+      <select class="house-switcher" aria-label="Vali Rõngu Rahvamaja maja" onchange="switchHouse(this.value)">
+        <option value="rongu.html" selected>Rõngu Rahvamaja</option>
+        <option value="valguta.html">Valguta Seltsimaja</option>
       </select>
       <nav class="nav" aria-label="Põhimenüü">
         <button data-view="home" onclick="showView('home')">Avaleht</button><button data-view="events" onclick="showView('events')">Sündmused</button><button data-view="activities" onclick="showView('activities')">Huviringid</button><button data-view="rooms" onclick="showView('rooms')">Ruumid</button><button data-view="booking" onclick="showView('booking')">Broneeri</button><button data-view="ideas" onclick="showView('ideas')">Ideepank</button><button class="staff-button" onclick="showView('login')">Töötajale ↗</button><a class="external-nav" href="kultuuriekraan.html">Elva kultuuriekraan</a>
@@ -185,6 +185,14 @@
       const activityEyebrow=document.querySelector('#view-activities .page-head .eyebrow');if(activityEyebrow)activityEyebrow.textContent=HOUSE.area;
       const contactHeading=document.querySelector('#view-contact .panel h2');if(contactHeading)contactHeading.textContent=HOUSE.name;
       const footerP=document.querySelector('.footer p');if(footerP)footerP.textContent=`${HOUSE.locality} · kogu ${HOUSE.area} kohtumispaik`;
+    }
+    function switchHouse(target){
+      if(!target)return;
+      let view=activeView||location.hash.replace(/^#/,'')||'home';
+      if(!viewNames.includes(view))view='home';
+      const targetFile=String(target).split('#')[0];
+      if(targetFile.includes('valguta.html')&&view==='booking')view='contact';
+      location.href=targetFile+'#'+view;
     }
     function routeView(hash=location.hash){const name=hash.replace(/^#/,'');return viewNames.includes(name)?name:'home';}
     function showView(name,fromHistory=false){
