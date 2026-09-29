@@ -203,6 +203,7 @@ async function kLoadWorkspaceSection(section,force=false){
       if(Object.prototype.hasOwnProperty.call(kWorkspace,section)){kWorkspace._loadedSections[section]=true;return kWorkspace;}
       throw new Error('SERVER_UPDATE_REQUIRED');
     }
+    if(section==='bookings'){kWorkspace.bookings=result.bookings||[];kWorkspace.organizationSummary=result.organizationSummary||null;}
     if(section==='ideas')kWorkspace.ideas=result.ideas||[];
     if(section==='contracts')kWorkspace.contracts=result.contracts||[];
     if(section==='users')kWorkspace.users=result.users||[];
@@ -234,8 +235,9 @@ async function kLoadWorkspace(force=false){
     if(!result.ok)throw new Error(result.error||'Töölauda ei saanud laadida.');
     if(!result.apiVersion||result.apiVersion<3||!result.site)throw new Error('SERVER_UPDATE_REQUIRED');
     const previous=kWorkspace||{},loaded={...(previous._loadedSections||{})};
-    for(const key of ['contracts','ideas','users','activity'])if(Object.prototype.hasOwnProperty.call(result,key))loaded[key]=true;
+    for(const key of ['bookings','contracts','ideas','users','activity'])if(Object.prototype.hasOwnProperty.call(result,key))loaded[key]=true;
     kWorkspace={...previous,...result,
+      bookings:Object.prototype.hasOwnProperty.call(result,'bookings')?(result.bookings||[]):(previous.bookings||[]),
       contracts:Object.prototype.hasOwnProperty.call(result,'contracts')?(result.contracts||[]):(previous.contracts||[]),
       ideas:Object.prototype.hasOwnProperty.call(result,'ideas')?(result.ideas||[]):(previous.ideas||[]),
       users:Object.prototype.hasOwnProperty.call(result,'users')?(result.users||[]):(previous.users||[]),
@@ -260,7 +262,7 @@ async function kReloadStaff(){
   const root=$('staffContent');root.innerHTML='<p class="loading">Uuendan andmeid…</p>';
   try{
     await kLoadWorkspace(true);
-    const lazy={ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
+    const lazy={calendar:'bookings',ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
     if(lazy)await kLoadWorkspaceSection(lazy,true);
     if(kStaffTab==='calendar'&&manager())await kLoadWorkspaceSection('contracts',true);
     kRenderStaff();
@@ -272,9 +274,9 @@ function kRenderStaff(){
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
   $('staffContent').innerHTML=`<div class="panel-header"><p class="hint" style="margin:0">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><button class="button outline small" type="button" onclick="kReloadStaff()">Uuenda andmeid</button></div>${manager()?kOrganizationSummaryHTML():kLeaderQuickHTML()}<nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
   const content={calendar:kBookingsHTML,collectives:kActivitiesHTML,ideas:kIdeasHTML,import:kImportHTML,settings:kSettingsHTML,users:kUsersHTML,activity:kActivityHTML}[kStaffTab];
-  const lazy={ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
+  const lazy={calendar:'bookings',ideas:'ideas',users:'users',activity:'activity'}[kStaffTab];
   $('kStaffSection').innerHTML=lazy&&!kSectionLoaded(lazy)?'<p class="loading">Laadin selle vaate andmeid…</p>':content();
-  if(kStaffTab==='calendar'){kRenderBookings();if(manager()&&!kSectionLoaded('contracts'))kEnsureWorkspaceSection('contracts');}
+  if(kStaffTab==='calendar'&&kSectionLoaded('bookings')){kRenderBookings();if(manager()&&!kSectionLoaded('contracts'))kEnsureWorkspaceSection('contracts');}
   else if(lazy&&!kSectionLoaded(lazy))kEnsureWorkspaceSection(lazy);
 }
 function kSwitchStaff(tab){kStaffTab=tab;try{sessionStorage.setItem(kStaffTabKey,tab);}catch(e){}kRenderStaff();}
@@ -423,7 +425,7 @@ function kRenderBookings(){
     return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
   }).join('')||'<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
 }
-async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await kLoadWorkspace(true);kRenderStaff();}catch(e){alert(e.message);}}
+async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);if(manager())await kLoadWorkspaceSection('contracts',true);kRenderStaff();}catch(e){alert(e.message);}}
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
 function kIsoWeekday(date){return ((new Date(date+'T12:00:00Z').getUTCDay()+6)%7)+1;}
 async function kNewSchedule(date=etDate()){
@@ -476,7 +478,7 @@ async function kPreviewSchedule(ev){
 function kExcludeConflicts(){const dates=kSchedulePending?.conflicts.map(c=>c.date)||[];if($('kRepeat').value==='once'){kNotice('kScheduleMessage','Vali sellele proovile teine aeg.',true);return;}$('kExceptions').value=[$('kExceptions').value,...dates].filter(Boolean).join(', ');kInvalidateSchedule();kPreviewSchedule();}
 async function kCommitSchedule(){
   if(!kSchedulePending)return;const button=$('kSaveScheduleButton');button.disabled=true;const draft={...kSchedulePending};delete draft.conflicts;delete draft.skippedPast;
-  try{const result=await post(draft);kSchedulePending=null;$('kScheduleReview').innerHTML='';kNotice('kScheduleMessage',`${result.message} ${result.notificationResult?.warning|| (result.notificationResult?.sent?'Juhatajale saadeti üks koondkiri.':'Meiliteadet ei saadetud.')}`);await kLoadWorkspace(true);await loadEventSchedule('upcoming',{force:true});}catch(e){kNotice('kScheduleMessage',e.message+' Saad sama salvestust uuesti proovida.',true);button.disabled=false;}
+  try{const result=await post(draft);kSchedulePending=null;$('kScheduleReview').innerHTML='';kNotice('kScheduleMessage',`${result.message} ${result.notificationResult?.warning|| (result.notificationResult?.sent?'Juhatajale saadeti üks koondkiri.':'Meiliteadet ei saadetud.')}`);await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);await loadEventSchedule('upcoming',{force:true});}catch(e){kNotice('kScheduleMessage',e.message+' Saad sama salvestust uuesti proovida.',true);button.disabled=false;}
 }
 
 function kOpenEdit(id,operation){
@@ -495,7 +497,7 @@ async function kPreviewEdit(ev){
     $('kEditReview').innerHTML=result.conflicts.length?'':`<div class="k-review"><h3>Muudatus puudutab ${result.count} kirjet</h3><p>${draft.notify==='summary'?'Saadetakse üks koondkiri.':'Meiliteadet ei saadeta.'}</p><button type="button" class="button" id="kEditCommit" onclick="kCommitEdit()">${{edit:'Salvesta muudatus',cancel:'Tühista valitud kirjed',restore:'Taasta valitud kirjed'}[draft.operation]}</button></div>`;
   }catch(e){kNotice('kEditMessage',e.message,true);}finally{button.disabled=false;}
 }
-async function kCommitEdit(){if(!kEditPending)return;const button=$('kEditCommit');button.disabled=true;try{const result=await post(kEditPending);kEditPending=null;$('kEditReview').innerHTML='';kNotice('kEditMessage',result.message+' '+(result.notificationResult?.warning|| (result.notificationResult?.sent?'Üks koondkiri saadetud.':'Meiliteadet ei saadetud.')));await kLoadWorkspace(true);if($('kBookingList'))kRenderBookings();await loadEventSchedule('upcoming',{force:true});}catch(e){kNotice('kEditMessage',e.message,true);button.disabled=false;}}
+async function kCommitEdit(){if(!kEditPending)return;const button=$('kEditCommit');button.disabled=true;try{const result=await post(kEditPending);kEditPending=null;$('kEditReview').innerHTML='';kNotice('kEditMessage',result.message+' '+(result.notificationResult?.warning|| (result.notificationResult?.sent?'Üks koondkiri saadetud.':'Meiliteadet ei saadetud.')));await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);if(manager())await kLoadWorkspaceSection('contracts',true);if($('kBookingList'))kRenderBookings();await loadEventSchedule('upcoming',{force:true});}catch(e){kNotice('kEditMessage',e.message,true);button.disabled=false;}}
 
 const kActivityFields=[['name','Nimi',100],['schedule','Prooviaja kirjeldus',400],['location','Tegutsemiskoht',200],['instructor','Juhendaja nimi',160],['email','Kontakt e-post',120,'email'],['phone','Telefon',80],['audience','Sihtrühm',300],['fee','Osalustasu / tingimus',160],['joinLabel','Liitumisnupu tekst',120],['joinUrl','Liitumise HTTPS-link',1200,'url'],['description','Tutvustus',2000,'textarea'],['imageAlt','Pildi kirjeldus',200],['linkUrl','Lisainfo HTTPS-link',1200,'url']];
 function kActivityEditor(c){
