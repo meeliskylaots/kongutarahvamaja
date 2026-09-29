@@ -78,7 +78,7 @@ function kRenderActivities(){
 }
 function kApplyPublic(){
   if(!kSite)return;
-  const t=kSite.texts;rooms[0].text=t.hallDescription;rooms[0].capacity=t.hallCapacity;
+  const t=kSite.texts;if(rooms[0]){rooms[0].text=t.hallDescription;rooms[0].capacity=t.hallCapacity;}
   for(const key of ['homeTitle','homeDescription','homeNote','communityTitle','communityDescription','activitiesDescription'])if($(key)){if(key!=='homeTitle'||$(key).textContent!==t[key])$(key).textContent=t[key]};
   if($('contactAddress'))$('contactAddress').textContent=t.address;
   if($('contactPhone')){$('contactPhone').textContent=t.phone;$('contactPhone').href='tel:'+t.phone.replace(/[^\d+]/g,'');}
