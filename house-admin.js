@@ -13,7 +13,11 @@ function kClearWorkspaceCache(allOrg=false){
 }
 function kSaveWorkspaceCache(){
   if(!staffToken||!staffUser||!kWorkspace)return;
-  try{sessionStorage.setItem(kStaffCacheKey,JSON.stringify({savedAt:Date.now(),token:staffToken,user:staffUser,workspace:kWorkspace}));}catch(e){}
+  try{
+    const workspace={...kWorkspace,bookingsAll:[]};
+    if(workspace._loadedSections)workspace._loadedSections={...workspace._loadedSections,bookingsAll:false};
+    sessionStorage.setItem(kStaffCacheKey,JSON.stringify({savedAt:Date.now(),token:staffToken,user:staffUser,workspace}));
+  }catch(e){}
 }
 function kRestoreWorkspaceCache(token){
   try{
@@ -206,7 +210,12 @@ async function kLoadWorkspaceSection(section,force=false){
       if(Object.prototype.hasOwnProperty.call(kWorkspace,section)){kWorkspace._loadedSections[section]=true;return kWorkspace;}
       throw new Error('SERVER_UPDATE_REQUIRED');
     }
-    if(section==='bookings'){kWorkspace.bookings=result.bookings||[];kWorkspace.organizationSummary=result.organizationSummary||null;}
+    if(section==='bookings'){
+      kWorkspace.bookings=result.bookings||[];kWorkspace.bookingSeries=result.series||[];kWorkspace.organizationSummary=result.organizationSummary||null;
+      kWorkspace.bookingsAll=[];if(kWorkspace._loadedSections)delete kWorkspace._loadedSections.bookingsAll;
+      Object.keys(kSeriesOccurrenceCache).forEach(key=>delete kSeriesOccurrenceCache[key]);
+    }
+    if(section==='bookingsAll'){kWorkspace.bookingsAll=result.bookingsAll||[];kWorkspace.organizationSummary=result.organizationSummary||kWorkspace.organizationSummary||null;}
     if(section==='ideas')kWorkspace.ideas=result.ideas||[];
     if(section==='contracts')kWorkspace.contracts=result.contracts||[];
     if(section==='users')kWorkspace.users=result.users||[];
@@ -241,6 +250,8 @@ async function kLoadWorkspace(force=false){
     for(const key of ['bookings','contracts','ideas','users','activity'])if(Object.prototype.hasOwnProperty.call(result,key))loaded[key]=true;
     kWorkspace={...previous,...result,
       bookings:Object.prototype.hasOwnProperty.call(result,'bookings')?(result.bookings||[]):(previous.bookings||[]),
+      bookingSeries:Object.prototype.hasOwnProperty.call(result,'series')?(result.series||[]):(previous.bookingSeries||[]),
+      bookingsAll:previous.bookingsAll||[],
       contracts:Object.prototype.hasOwnProperty.call(result,'contracts')?(result.contracts||[]):(previous.contracts||[]),
       ideas:Object.prototype.hasOwnProperty.call(result,'ideas')?(result.ideas||[]):(previous.ideas||[]),
       users:Object.prototype.hasOwnProperty.call(result,'users')?(result.users||[]):(previous.users||[]),
