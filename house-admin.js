@@ -817,8 +817,51 @@ const kPriceFields={community:'Kogukonnasõbralik kasutus €/h',commercial:'Kom
 const kTextFields={homeTitle:'Avalehe pealkiri',homeDescription:'Avalehe tutvustus',homeNote:'Avalehe lisalause',communityTitle:'Kogukonna osa pealkiri',communityDescription:'Kogukonna osa tekst',activitiesDescription:'Huvitegevuse sissejuhatus',address:'Aadress',phone:'Telefon',email:'E-post',hallDescription:'Saali tutvustus',hallCapacity:'Saali mahutavus',included:'Rendi hinna sees (iga asi eraldi reale)',extra:'Eraldi kokkuleppel'};
 function kSettingsHTML(){return `<section class="panel"><h2>Kodulehe sisu ja hinnad</h2><form id="kSettingsForm" onsubmit="kSaveSettings(event)"><details class="k-activity" open><summary>Hinnakiri</summary><div class="field-grid k-activity-fields">${Object.entries(kPriceFields).map(([key,label])=>kField(label,'kPrice_'+key,kSite.prices[key],'number',`required min="${key.endsWith('Hours')||key.endsWith('Minimum')?'0.25':'0'}" max="10000" step="0.25"`)).join('')}</div></details><details class="k-activity"><summary>Avaleht, kontakt ja saal</summary><div class="k-activity-fields">${Object.entries(kTextFields).map(([key,label])=>kText(label,'kText_'+key,kSite.texts[key],'maxlength="3000"')).join('')}</div></details><button type="submit" class="button">Salvesta sisu ja hinnad</button><div id="kSettingsMessage" class="status-msg" aria-live="polite"></div></form></section><section class="panel"><h2>Pildid ja ruumide lisainfo</h2><div class="content-list">${[{type:'house',id:HOUSE.id,name:'Avalehe pilt'},...rooms.map(r=>({type:'room',...r}))].map(r=>`<button class="content-option" onclick="kImageEditor('${r.type}','${r.id}')">${esc(r.name)}</button>`).join('')}</div><div id="kImageEditor"></div></section>`;}
 async function kSaveSettings(ev){ev.preventDefault();const button=ev.submitter;button.disabled=true;try{const prices=Object.fromEntries(Object.keys(kPriceFields).map(k=>[k,Number($('kPrice_'+k).value)])),texts=Object.fromEntries(Object.keys(kTextFields).map(k=>[k,$('kText_'+k).value.trim()]));const result=await post({action:'houseSaveSettings',revision:kSite.revision,prices,texts});kSite=result.site;await kLoadWorkspace(true);kApplyPublic();kNotice('kSettingsMessage','Sisu ja hinnad on salvestatud. Uus hind kehtib uutele broneeringutele.');}catch(e){kNotice('kSettingsMessage',e.message,true);}finally{button.disabled=false;}}
-async function kImageEditor(type,id){try{const result=await jsonp({action:'listPublicContent'});publicContent=result.content||[];const item=publicContent.find(x=>x.type===type&&x.id===id)||{};$('kImageEditor').innerHTML=`<form onsubmit="kSaveImage(event,'${type}','${id}')">${type==='room'?kText('Ruumi lisatutvustus','kRoomDescription',item.description,'maxlength="2000"'):''}${kImageControl(type==='house'?'Avalehe peapilt':'Ruumi põhifoto',item.imageUrl||'',type,id,{id:'kImageUrl'})}${kField('Pildi kirjeldus','kImageAlt',item.imageAlt)}<button class="button small" type="submit">Salvesta</button><div id="kImageMessage" class="status-msg" aria-live="polite"></div></form>`;}catch(e){kNotice('kSettingsMessage',e.message,true);}}
+function kRoomGalleryItems(roomId){
+  const prefix=String(roomId)+'::';
+  return (publicContent||[]).filter(x=>x.type==='room_gallery'&&String(x.id||'').startsWith(prefix)&&x.imageUrl).slice(0,6);
+}
+function kRoomGalleryEditor(roomId){
+  const items=kRoomGalleryItems(roomId),room=rooms.find(r=>r.id===roomId);
+  return `<div class="k-activity-fields" style="margin-top:18px"><div class="panel-header"><div><h3 style="margin:0">Ruumi galerii</h3><p class="hint" style="margin:4px 0 0">Põhifotole saad lisada kuni 6 lisapilti.</p></div><span class="badge">${items.length}/6</span></div>
+    <div class="content-list">${items.map(item=>`<div class="booking-row"><img src="${esc(item.imageUrl)}" alt="${esc(item.imageAlt||'')}" style="width:120px;max-width:32%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;float:left;margin-right:14px"><label class="field"><span>Pildi kirjeldus</span><input id="kGalleryAlt_${esc(item.id)}" value="${esc(item.imageAlt||'')}" maxlength="200"></label><div class="row-actions"><button class="button outline small" type="button" onclick="kSaveRoomGalleryAlt('${esc(item.id)}','${esc(roomId)}')">Salvesta kirjeldus</button><button class="button outline small" type="button" onclick="kDeleteRoomGalleryItem('${esc(item.id)}','${esc(roomId)}')">Eemalda</button></div><div style="clear:both"></div></div>`).join('')||'<p class="muted">Lisapilte pole veel lisatud.</p>'}</div>
+    ${items.length<6?`<label class="button outline small" style="cursor:pointer;display:inline-flex">Lisa galerii pilt<input type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="kUploadRoomGalleryImage(this,'${esc(roomId)}')"></label>`:''}<div id="kGalleryMessage" class="status-msg" aria-live="polite"></div></div>`;
+}
+async function kImageEditor(type,id){
+  try{
+    const result=await jsonp({action:'listPublicContent'});publicContent=result.content||[];
+    const item=publicContent.find(x=>x.type===type&&x.id===id)||{};
+    $('kImageEditor').innerHTML=`<form onsubmit="kSaveImage(event,'${type}','${id}')">${type==='room'?kText('Ruumi lisatutvustus','kRoomDescription',item.description,'maxlength="2000"'):''}${kImageControl(type==='house'?'Avalehe peapilt':'Ruumi põhifoto',item.imageUrl||'',type,id,{id:'kImageUrl'})}${kField('Pildi kirjeldus','kImageAlt',item.imageAlt)}<button class="button small" type="submit">Salvesta</button><div id="kImageMessage" class="status-msg" aria-live="polite"></div></form>${type==='room'?kRoomGalleryEditor(id):''}`;
+  }catch(e){kNotice('kSettingsMessage',e.message,true);}
+}
 async function kSaveImage(ev,type,id){ev.preventDefault();ev.submitter.disabled=true;try{const old=publicContent.find(x=>x.type===type&&x.id===id)||{};await post({action:'savePublicContent',type,id,description:type==='house'?old.description||'':$('kRoomDescription').value,imageUrl:$('kImageUrl').value.trim(),imageAlt:$('kImageAlt').value.trim(),linkUrl:old.linkUrl||''});await loadPublicHouse();renderRooms();kNotice('kImageMessage','Salvestatud.');}catch(e){kNotice('kImageMessage',e.message,true);}finally{ev.submitter.disabled=false;}}
+async function kUploadRoomGalleryImage(input,roomId){
+  const message=$('kGalleryMessage');input.disabled=true;kNotice('kGalleryMessage','Valmistan pilti ette…');
+  try{
+    if(kRoomGalleryItems(roomId).length>=6)throw new Error('Sellele ruumile on juba lisatud 6 galeriipilti.');
+    const prepared=await kPrepareImage(input.files?.[0]);kNotice('kGalleryMessage','Laadin pilti üles…');
+    const uploaded=await post({action:'uploadPublicImage',targetType:'room',targetId:roomId,...prepared});
+    const room=rooms.find(r=>r.id===roomId),id=roomId+'::'+crypto.randomUUID();
+    await post({action:'savePublicContent',type:'room_gallery',id,description:'',imageUrl:uploaded.imageUrl,imageAlt:(room?.name||'Ruum')+' foto',linkUrl:''});
+    await kImageEditor('room',roomId);await loadPublicHouse();renderRooms();
+  }catch(e){kNotice('kGalleryMessage',e.message||'Pildi lisamine ebaõnnestus.',true);}
+  finally{input.value='';input.disabled=false;}
+}
+async function kSaveRoomGalleryAlt(id,roomId){
+  const item=(publicContent||[]).find(x=>x.type==='room_gallery'&&x.id===id);if(!item)return;
+  try{await post({action:'savePublicContent',type:'room_gallery',id,description:'',imageUrl:item.imageUrl,imageAlt:$('kGalleryAlt_'+id).value.trim(),linkUrl:''});await kImageEditor('room',roomId);kNotice('kGalleryMessage','Pildi kirjeldus salvestatud.');}catch(e){kNotice('kGalleryMessage',e.message,true);}
+}
+async function kDeleteRoomGalleryItem(id,roomId){
+  if(!confirm('Eemaldan selle pildi ruumi galeriist?'))return;
+  try{await post({action:'deletePublicContent',type:'room_gallery',id});await kImageEditor('room',roomId);await loadPublicHouse();renderRooms();}catch(e){kNotice('kGalleryMessage',e.message,true);}
+}
+function kOpenPublicRoomGallery(roomId){
+  const primary=(publicContent||[]).find(x=>x.type==='room'&&x.id===roomId),items=[...(primary?.imageUrl?[primary]:[]),...kRoomGalleryItems(roomId)];
+  if(!items.length)return;
+  $('kPublicRoomGallery')?.remove();const room=rooms.find(r=>r.id===roomId),dialog=document.createElement('dialog');dialog.id='kPublicRoomGallery';dialog.className='k-dialog';
+  dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><h2>${esc(room?.name||'Ruumi pildid')}</h2><button class="k-dialog-close" type="button" aria-label="Sulge" onclick="$('kPublicRoomGallery').close()">×</button></div><div style="display:grid;gap:14px">${items.map(x=>`<figure style="margin:0"><img src="${esc(x.imageUrl)}" alt="${esc(x.imageAlt||room?.name||'')}" style="width:100%;max-height:70vh;object-fit:contain;border-radius:14px;background:#f5f8f4">${x.imageAlt?`<figcaption class="hint" style="margin-top:6px">${esc(x.imageAlt)}</figcaption>`:''}</figure>`).join('')}</div>`;
+  document.body.appendChild(dialog);dialog.addEventListener('click',ev=>{if(ev.target===dialog)dialog.close();});dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+}
 function kUsersHTML(){
   const platform=staffUser?.role==='platform_admin';
   const directors=(kWorkspace.users||[]).filter(u=>u.role==='director'&&String(u.organizationId||'')===ORG.id);
