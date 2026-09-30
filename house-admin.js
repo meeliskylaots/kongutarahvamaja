@@ -101,7 +101,7 @@ post = async function(payload) {
     if(!legacyAction || !/Tundmatu toiming/i.test(String(error?.message||''))) throw error;
     result = await kLegacy.post({...payload,action:legacyAction});
   }
-  if(!payload.dryRun && ['houseSaveSchedule','houseEditUsage','houseSaveActivities','houseSaveSettings','kongutaSaveSchedule','kongutaEditUsage','kongutaSaveActivities','kongutaSaveSettings'].includes(payload.action)) {
+  if(!payload.dryRun && ['houseSaveSchedule','houseSaveOccupancy','houseEditUsage','houseSaveActivities','houseSaveSettings','kongutaSaveSchedule','kongutaEditUsage','kongutaSaveActivities','kongutaSaveSettings'].includes(payload.action)) {
     invalidateCalendarAvailability(); kWorkspace=null; kClearWorkspaceCache();
   }
   return result;
@@ -158,11 +158,14 @@ function kApplyPublic(){
 getQuote=function(){
   if(!kSite)return kLegacy.getQuote();
   const p=kSite.prices,community=$('clientType').value==='community',room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom(),start=$('startTime').value,end=$('endTime').value;
+  const startDate=$('bookDate')?.value||'',endDate=$('bookEndDate')?.value||startDate;
   const configuredHourly=community?room?.pricing?.community:room?.pricing?.commercial;
   const fallbackHourly=community?p.community:p.commercial;
   const hourly=Number.isFinite(configuredHourly)?configuredHourly:(room?.id===kPrimaryRoom()?.id?fallbackHourly:null);
   const outdoor=!Number.isFinite(hourly);
-  const valid=!!(start&&end&&min(end)>min(start)),hours=valid?Math.ceil((min(end)-min(start))/60):0;
+  const startMs=startDate&&start?new Date(startDate+'T'+start+':00').getTime():NaN,endMs=endDate&&end?new Date(endDate+'T'+end+':00').getTime():NaN;
+  const valid=Number.isFinite(startMs)&&Number.isFinite(endMs)&&endMs>startMs;
+  const hours=valid?Math.ceil((endMs-startMs)/3600000):0;
   const roomCost=outdoor?0:hours*hourly,selected=[];
   if($('serviceSound').checked)selected.push({label:'Helitehnika',total:p.sound});
   if($('serviceLights').checked)selected.push({label:'Valgustus',total:p.lights});
@@ -201,7 +204,7 @@ submitBooking=async function(ev){
     const q=getQuote();
     const result=await post({
       action:'submitSiteBooking',
-      roomId:$('bookRoom').value,date:$('bookDate').value,startTime:$('startTime').value,endTime:$('endTime').value,
+      roomId:$('bookRoom').value,date:$('bookDate').value,endDate:$('bookEndDate')?.value||$('bookDate').value,startTime:$('startTime').value,endTime:$('endTime').value,
       clientType:$('clientType').value,clientName:$('clientName').value.trim(),clientEmail:$('clientEmail').value.trim(),clientPhone:$('clientPhone').value.trim(),
       eventDescription:$('eventDescription').value.trim(),
       selectedServiceIds:[['serviceSound','sound'],['serviceLights','lights'],['serviceTechnician','technician']].filter(([id])=>$(id).checked).map(([,id])=>id),
@@ -210,7 +213,7 @@ submitBooking=async function(ev){
       quoteNote:[q.outdoor?'Valitud ruumi hind täpsustatakse eraldi.':'',HOUSE.servicesMode==='request'?'Tehnika ja muud lisavajadused hinnastab rahvamaja eraldi.':'','Broneerimisel kuvatud hinnainfo on esialgne; lõpliku hinna kinnitab rahvamaja.'].filter(Boolean).join(' ')
     });
     kNotice('bookingMessage',`${result.message} Broneeringu number: ${result.bookingId}. ${result.warning||''}`);
-    $('bookingForm').reset();$('bookDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)
+    $('bookingForm').reset();$('bookDate').value=etDate();if($('bookEndDate'))$('bookEndDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)
   }catch(e){kNotice('bookingMessage',e.message,true);button.disabled=false;}
 };
 
@@ -464,7 +467,7 @@ function kOpenContract(bookingId){
     const general=current?.generalTerms??kDefaultContractGeneral();
     const priceNote=current?.priceNote??'Lõpliku summa aluseks on käesolev leping.';
     dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise leping</h2></div><button type="button" class="k-dialog-close" aria-label="Sulge leping ilma saatmata" onclick="kCloseContractDialog()">×</button></div>
-    <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>
+    <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}${b.endDate&&b.endDate!==b.date?' – '+esc(kDateLabel(b.endDate))+' ':'–'}${esc(b.endTime)} · ${esc(b.roomName)}</p>
     ${kBookingSnapshotHTML(current?.bookingSnapshot||kBookingSnapshotFromBooking(b))}
     ${current?.status==='saadetud'?`<div class="status-msg">Kliendile on juba saadetud versioon ${esc(current.version)}. Uue versiooni saatmisel muutub eelmine link kehtetuks.</div>`:''}
     <div id="kContractDraftState" class="status-msg">${current?.status==='mustand'?'Mustand on serverisse salvestatud.':'Mustandit ei ole veel salvestatud.'}</div>
@@ -540,8 +543,9 @@ function kBookingItemHTML(b){
     else if(contractRequired)primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
     else{const pending=['ootel','pending'].includes(status);primary=(pending?`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita broneering</button>`:'')+`<button class="button outline small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;}
   }else if(manager()&&['ootel','pending'].includes(status))primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
-  const actions=!active?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
-  return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
+  const occupancy=manager()&&external&&active?`<button class="button outline small" onclick="kOpenOccupancy('${esc(b.id)}')">Määra kalendri hõive</button>`:'';
+  const actions=!active?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${occupancy}${primary}`;
+  return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))}${b.endDate&&b.endDate!==b.date?' – '+esc(kDateLabel(b.endDate)):''} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
 }
 
 function kBuildSeriesFromBookings(list){
@@ -618,6 +622,32 @@ function kRenderBookings(){
     if(!html)html='<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
   }
   $('kBookingList').innerHTML=html;
+}
+function kOpenOccupancy(bookingId){
+  const b=kFindBooking(bookingId);if(!b)return;
+  $('kOccupancyDialog')?.remove();
+  const dialog=document.createElement('dialog');dialog.id='kOccupancyDialog';dialog.className='k-dialog';
+  const defaultEndDate=b.endDate||b.date;
+  dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><div><span class="eyebrow">Kalendri hõive</span><h2>Blokeeri ruumid teistele broneeringutele</h2></div><button type="button" class="k-dialog-close" aria-label="Sulge" onclick="$('kOccupancyDialog').close()">×</button></div>
+    <p><strong>${esc(b.name||b.publicTitle||'Broneering')}</strong> · ${esc(b.roomName)}</p>
+    <div class="status-msg"><strong>See ei muuda lepingut ega rendihinda.</strong><br>Hõive määrab ainult aja, mil teised kasutajad ei saa valitud ruumi või maja broneerida.</div>
+    <form onsubmit="kSaveOccupancy(event,'${esc(b.id)}')">
+      <label class="field"><span>Hõive ulatus</span><select id="kOccupancyScope"><option value="house">Kogu maja – kõik broneeritavad ruumid</option><option value="room">Ainult ${esc(b.roomName)}</option></select></label>
+      <div class="field-grid">${kField('Hõive alguskuupäev','kOccupancyStartDate',b.date,'date','required')}${kField('Hõive lõppkuupäev','kOccupancyEndDate',defaultEndDate,'date','required')}</div>
+      <div class="field-grid">${kField('Hõive algusaeg','kOccupancyStartTime',b.startTime,'time','required')}${kField('Hõive lõpuaeg','kOccupancyEndTime',b.endTime,'time','required')}</div>
+      <p class="hint">Näiteks: pidu 18.00–01.00, aga laudade sättimiseks ja koristuseks võib kalendri hõive olla 15.00–järgmise päeva 11.00.</p>
+      <div class="row-actions"><button class="button" id="kOccupancySave" type="submit">Salvesta kalendri hõive</button><button class="button outline" type="button" onclick="$('kOccupancyDialog').close()">Sulge</button></div>
+      <div id="kOccupancyMessage" class="status-msg" aria-live="polite"></div>
+    </form>`;
+  document.body.appendChild(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.showModal();
+}
+async function kSaveOccupancy(ev,bookingId){
+  ev.preventDefault();const button=$('kOccupancySave');button.disabled=true;kNotice('kOccupancyMessage','Kontrollin hõivet…');
+  try{
+    const payload={action:'houseSaveOccupancy',bookingId,scope:$('kOccupancyScope').value,startDate:$('kOccupancyStartDate').value,endDate:$('kOccupancyEndDate').value,startTime:$('kOccupancyStartTime').value,endTime:$('kOccupancyEndTime').value,requestId:'KRM-OCC-'+crypto.randomUUID()};
+    const result=await post(payload);kNotice('kOccupancyMessage',result.message||'Hõive salvestatud.');
+    await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);setTimeout(()=>{$('kOccupancyDialog')?.close();kRenderStaff();},600);
+  }catch(e){kNotice('kOccupancyMessage',e.message||'Hõivet ei saanud salvestada.',true);button.disabled=false;}
 }
 async function kApproveLegacy(id){try{await post({action:'updateStatus',bookingId:id,status:'kinnitatud'});await kLoadWorkspace(true);await kLoadWorkspaceSection('bookings',true);if(manager())await kLoadWorkspaceSection('contracts',true);kRenderStaff();}catch(e){alert(e.message);}}
 function kSeasonRange(date){const y=Number(date.slice(0,4)),m=Number(date.slice(5,7)),year=m<=7?y-1:y;return {year,start:`${year}-09-01`,end:`${year+1}-07-31`};}
@@ -700,10 +730,10 @@ function kOpenEdit(id,operation){
   const b=kFindBooking(id);if(!b)return;kEditing={booking:b,operation};kEditPending=null;
   $('kEditDialog')?.remove();const dialog=document.createElement('dialog');dialog.id='kEditDialog';dialog.className='k-dialog';dialog.setAttribute('aria-labelledby','kEditHeading');
   const label={edit:'Muuda kalendrikirjet',cancel:'Tühista kalendrikirje',restore:'Taasta kalendrikirje'}[operation];
-  dialog.innerHTML=`<div class="panel-header"><h2 id="kEditHeading">${label}</h2><button type="button" class="text-link" onclick="$('kEditDialog').close()">Sulge</button></div><p>${esc(b.publicTitle||b.collective||'Ruum kasutuses')} · ${esc(kDateLabel(b.date))}</p><form id="kEditForm" onsubmit="kPreviewEdit(event)"><label class="field"><span>Muudatuse ulatus</span><select id="kEditScope"><option value="one">Ainult see kord</option>${b.seriesId?'<option value="following">See ja järgnevad korrad</option><option value="all">Kogu seeria</option>':''}</select></label>${operation==='edit'?`<div class="field-grid">${kField('Kuupäev','kEditDate',b.date,'date','required')}<label class="field"><span>Ruum</span><select id="kEditRoom" required>${kRoomOptions(b.roomId,!b.collectiveId)}</select></label></div><p class="hint">Seeria kuupäeva muutmisel nihkuvad valitud korrad sama arvu päevade võrra.</p><div class="field-grid">${kField('Algusaeg','kEditStart',b.startTime,'time','required')}${kField('Lõpuaeg','kEditEnd',b.endTime,'time','required')}</div>${b.collectiveId?'':kField('Nimetus','kEditTitle',b.publicTitle,'text','required maxlength="160"')}${b.collectiveId?'':`<h3 style="font:700 15px Manrope;margin:18px 0 10px">Avalik sündmuse info</h3>${kText('Lühikirjeldus','kEditPublicDescription',b.publicDescription||'','maxlength="600"')}${kImageControl('Sündmuse pilt',b.imageUrl||'','event',b.id,{id:'kEditImageUrl'})}<div class="field-grid">${kField('Piletimüügi link','kEditTicketUrl',b.ticketUrl||'','url','maxlength="500" placeholder="https://…"')}${kField('Sotsiaalmeedia / Facebooki sündmuse link','kEditSocialUrl',b.socialUrl||'','url','maxlength="500" placeholder="https://…"')}</div>${kField('Lisainfo link','kEditInfoUrl',b.infoUrl||'','url','maxlength="500" placeholder="https://…"')}`}<label class="service-option"><input id="kEditPublic" type="checkbox" ${b.publicEvent?'checked':''}><span>${b.collectiveId?'Näita nimetust avalikus kalendris':'Näita sündmust avalikul sündmuste lehel'}</span></label>${kText('Lisainfo','kEditNotes',b.notes,'maxlength="1500"')}`:`<p class="hint">${operation==='cancel'?'Tühistamine vabastab ruumi. Kirjed säilivad ja neid saab hiljem taastada.':'Taastamisel kontrollitakse kõiki valitud aegu uuesti koos puhvriga.'}</p>`}${kNotify('kNotifyEdit')}<button class="button" id="kEditPreview" type="submit">Vaata muudatus üle</button><div id="kEditMessage" class="status-msg" aria-live="polite"></div><div id="kEditReview" aria-live="polite"></div></form>`;
+  dialog.innerHTML=`<div class="panel-header"><h2 id="kEditHeading">${label}</h2><button type="button" class="text-link" onclick="$('kEditDialog').close()">Sulge</button></div><p>${esc(b.publicTitle||b.collective||'Ruum kasutuses')} · ${esc(kDateLabel(b.date))}</p><form id="kEditForm" onsubmit="kPreviewEdit(event)"><label class="field"><span>Muudatuse ulatus</span><select id="kEditScope"><option value="one">Ainult see kord</option>${b.seriesId?'<option value="following">See ja järgnevad korrad</option><option value="all">Kogu seeria</option>':''}</select></label>${operation==='edit'?`<div class="field-grid">${kField('Alguskuupäev','kEditDate',b.date,'date','required')}${!b.collectiveId?kField('Lõppkuupäev','kEditEndDate',b.endDate||b.date,'date','required'):''}</div><label class="field"><span>Ruum</span><select id="kEditRoom" required>${kRoomOptions(b.roomId,!b.collectiveId&&String(b.type||'').toLowerCase()!=='broneering')}</select></label><p class="hint">Seeria kuupäeva muutmisel nihkuvad valitud korrad sama arvu päevade võrra.</p><div class="field-grid">${kField('Algusaeg','kEditStart',b.startTime,'time','required')}${kField('Lõpuaeg','kEditEnd',b.endTime,'time','required')}</div>${b.collectiveId?'':kField('Nimetus','kEditTitle',b.publicTitle,'text','required maxlength="160"')}${b.collectiveId?'':`<h3 style="font:700 15px Manrope;margin:18px 0 10px">Avalik sündmuse info</h3>${kText('Lühikirjeldus','kEditPublicDescription',b.publicDescription||'','maxlength="600"')}${kImageControl('Sündmuse pilt',b.imageUrl||'','event',b.id,{id:'kEditImageUrl'})}<div class="field-grid">${kField('Piletimüügi link','kEditTicketUrl',b.ticketUrl||'','url','maxlength="500" placeholder="https://…"')}${kField('Sotsiaalmeedia / Facebooki sündmuse link','kEditSocialUrl',b.socialUrl||'','url','maxlength="500" placeholder="https://…"')}</div>${kField('Lisainfo link','kEditInfoUrl',b.infoUrl||'','url','maxlength="500" placeholder="https://…"')}`}<label class="service-option"><input id="kEditPublic" type="checkbox" ${b.publicEvent?'checked':''}><span>${b.collectiveId?'Näita nimetust avalikus kalendris':'Näita sündmust avalikul sündmuste lehel'}</span></label>${kText('Lisainfo','kEditNotes',b.notes,'maxlength="1500"')}`:`<p class="hint">${operation==='cancel'?'Tühistamine vabastab ruumi. Kirjed säilivad ja neid saab hiljem taastada.':'Taastamisel kontrollitakse kõiki valitud aegu uuesti koos puhvriga.'}</p>`}${kNotify('kNotifyEdit')}<button class="button" id="kEditPreview" type="submit">Vaata muudatus üle</button><div id="kEditMessage" class="status-msg" aria-live="polite"></div><div id="kEditReview" aria-live="polite"></div></form>`;
   document.body.appendChild(dialog);$('kEditForm').addEventListener('input',()=>{kEditPending=null;$('kEditReview').innerHTML='';});dialog.showModal();
 }
-function kEditDraft(){const {booking:b,operation}=kEditing;return {action:'houseEditUsage',bookingId:b.id,operation,scope:$('kEditScope').value,notify:$('kNotifyEdit').checked?'summary':'none',...(operation==='edit'?{date:$('kEditDate').value,roomId:$('kEditRoom').value,startTime:$('kEditStart').value,endTime:$('kEditEnd').value,publicTitle:$('kEditTitle')?.value||b.publicTitle,publicEvent:$('kEditPublic').checked,publicDescription:$('kEditPublicDescription')?.value.trim()||'',imageUrl:$('kEditImageUrl')?.value.trim()||'',ticketUrl:$('kEditTicketUrl')?.value.trim()||'',socialUrl:$('kEditSocialUrl')?.value.trim()||'',infoUrl:$('kEditInfoUrl')?.value.trim()||'',notes:$('kEditNotes').value}: {})};}
+function kEditDraft(){const {booking:b,operation}=kEditing;return {action:'houseEditUsage',bookingId:b.id,operation,scope:$('kEditScope').value,notify:$('kNotifyEdit').checked?'summary':'none',...(operation==='edit'?{date:$('kEditDate').value,endDate:$('kEditEndDate')?.value||$('kEditDate').value,roomId:$('kEditRoom').value,startTime:$('kEditStart').value,endTime:$('kEditEnd').value,publicTitle:$('kEditTitle')?.value||b.publicTitle,publicEvent:$('kEditPublic').checked,publicDescription:$('kEditPublicDescription')?.value.trim()||'',imageUrl:$('kEditImageUrl')?.value.trim()||'',ticketUrl:$('kEditTicketUrl')?.value.trim()||'',socialUrl:$('kEditSocialUrl')?.value.trim()||'',infoUrl:$('kEditInfoUrl')?.value.trim()||'',notes:$('kEditNotes').value}: {})};}
 async function kPreviewEdit(ev){
   ev.preventDefault();const button=$('kEditPreview');button.disabled=true;kNotice('kEditMessage','Kontrollin muudatust…');
   try{const draft=kEditDraft(),signature=JSON.stringify(draft),result=await post({...draft,dryRun:true});if(signature!==JSON.stringify(kEditDraft()))throw new Error('Vorm muutus. Kontrolli muudatust uuesti.');
