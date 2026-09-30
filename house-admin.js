@@ -334,7 +334,7 @@ function kCloseContractDialog(useHistory=true){
   if(dialog){try{dialog.close();}catch(e){}dialog.remove();}
 }
 window.addEventListener('popstate',()=>{if($('kContractDialog')?.open)kCloseContractDialog(false);});
-const kContractStatusLabels={saadetud:'Ootab kliendi kinnitust',kinnitatud:'Kinnitatud',asendatud:'Asendatud',tühistatud:'Tühistatud'};
+const kContractStatusLabels={mustand:'Mustand',saadetud:'Ootab kliendi kinnitust',kinnitatud:'Kinnitatud',asendatud:'Asendatud',tühistatud:'Tühistatud'};
 function kContractForBooking(bookingId){
   return (kWorkspace?.contracts||[]).filter(c=>c.bookingId===bookingId).sort((a,b)=>(Number(b.version)||0)-(Number(a.version)||0))[0]||null;
 }
@@ -380,10 +380,6 @@ function kContractViewHTML(c){
   <h3>Tühistamise tingimused</h3><p style="white-space:pre-wrap">${esc(c.cancellationTerms)}</p>
   <h3>Üldtingimused</h3><p style="white-space:pre-wrap">${esc(c.generalTerms)}</p>`;
 }
-function kContractDraftKey(bookingId){return 'culturehub_contract_draft_v1:'+ORG.id+':'+HOUSE.id+':'+bookingId;}
-function kReadContractDraft(bookingId){
-  try{const d=JSON.parse(localStorage.getItem(kContractDraftKey(bookingId))||'null');return d&&typeof d==='object'?d:null;}catch(e){return null;}
-}
 function kContractDraftForm(){
   return {
     price:Number($('kContractPrice')?.value||0),
@@ -394,15 +390,18 @@ function kContractDraftForm(){
     generalTerms:$('kContractGeneral')?.value.trim()||''
   };
 }
-function kSaveContractDraft(bookingId){
+async function kSaveContractDraft(bookingId){
+  const button=$('kContractDraftSave');if(button)button.disabled=true;
+  kNotice('kContractMessage','Salvestan mustandi serverisse…');
   try{
-    const draft={...kContractDraftForm(),savedAt:new Date().toISOString()};
-    localStorage.setItem(kContractDraftKey(bookingId),JSON.stringify(draft));
+    const result=await post({action:'saveContractDraft',bookingId,...kContractDraftForm()});
+    await kLoadWorkspaceSection('contracts',true);
+    const state=$('kContractDraftState');
+    if(state)state.textContent='Mustand on serverisse salvestatud'+(result.savedAt?' · '+new Intl.DateTimeFormat('et-EE',{dateStyle:'short',timeStyle:'short'}).format(new Date(result.savedAt)):'')+'.';
     kNotice('kContractMessage','Mustand on salvestatud. Kliendile ei ole midagi saadetud.');
-    const badge=$('kContractDraftState');if(badge)badge.textContent='Mustand salvestatud '+new Intl.DateTimeFormat('et-EE',{dateStyle:'short',timeStyle:'short'}).format(new Date(draft.savedAt));
-  }catch(e){kNotice('kContractMessage','Mustandi salvestamine ebaõnnestus.',true);}
+  }catch(e){kNotice('kContractMessage',e.message||'Mustandi salvestamine ebaõnnestus.',true);}
+  finally{if(button)button.disabled=false;}
 }
-function kClearContractDraft(bookingId){try{localStorage.removeItem(kContractDraftKey(bookingId));}catch(e){}}
 function kOpenContract(bookingId){
   const b=kWorkspace.bookings.find(x=>x.id===bookingId);if(!b)return;
   const current=kContractForBooking(bookingId);
@@ -410,17 +409,17 @@ function kOpenContract(bookingId){
   if(current?.status==='kinnitatud'){
     dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><h2 id="kContractHeading">Ruumi kasutamise leping</h2><button type="button" class="k-dialog-close" aria-label="Sulge leping" onclick="kCloseContractDialog()">×</button></div><p>${esc(b.name)} · ${esc(kDateLabel(b.date))} · ${esc(b.roomName)}</p>${kContractViewHTML(current)}<div class="row-actions"><button class="button outline small" onclick="kResendContractPdf('${esc(current.id)}')">Saada PDF uuesti kliendile</button><button type="button" class="button outline small" onclick="kCloseContractDialog()">Sulge</button></div><div id="kContractMessage" class="status-msg"></div>`;
   }else{
-    const room=rooms.find(r=>r.id===b.roomId)||{},draft=kReadContractDraft(bookingId),price=draft?.price??current?.price??kContractSuggestedPrice(b);
-    const included=draft?.included??current?.included??((room.included||[]).join('\n'));
-    const special=draft?.specialTerms??current?.specialTerms??[b.notes,room.extra].filter(Boolean).join('\n');
-    const cancellation=draft?.cancellationTerms??current?.cancellationTerms??kDefaultContractCancellation();
-    const general=draft?.generalTerms??current?.generalTerms??kDefaultContractGeneral();
-    const priceNote=draft?.priceNote??current?.priceNote??'Lõpliku summa aluseks on käesolev kokkulepe.';
+    const room=rooms.find(r=>r.id===b.roomId)||{},price=current?.price??kContractSuggestedPrice(b);
+    const included=current?.included??((room.included||[]).join('\n'));
+    const special=current?.specialTerms??[b.notes,room.extra].filter(Boolean).join('\n');
+    const cancellation=current?.cancellationTerms??kDefaultContractCancellation();
+    const general=current?.generalTerms??kDefaultContractGeneral();
+    const priceNote=current?.priceNote??'Lõpliku summa aluseks on käesolev leping.';
     dialog.innerHTML=`<div class="panel-header k-dialog-sticky"><div><span class="eyebrow">Broneering ${esc(b.id)}</span><h2 id="kContractHeading">Koosta ruumi kasutamise leping</h2></div><button type="button" class="k-dialog-close" aria-label="Sulge leping ilma saatmata" onclick="kCloseContractDialog()">×</button></div>
     <p><strong>Klient:</strong> ${esc(b.name)} · ${esc(b.email)} · ${esc(b.phone||'')}<br><strong>Kasutus:</strong> ${esc(kDateLabel(b.date))} ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>
     ${kBookingSnapshotHTML(current?.bookingSnapshot||kBookingSnapshotFromBooking(b))}
     ${current?.status==='saadetud'?`<div class="status-msg">Kliendile on juba saadetud versioon ${esc(current.version)}. Uue versiooni saatmisel muutub eelmine link kehtetuks.</div>`:''}
-    <div id="kContractDraftState" class="status-msg">${draft?.savedAt?'Mustand salvestatud '+esc(new Intl.DateTimeFormat('et-EE',{dateStyle:'short',timeStyle:'short'}).format(new Date(draft.savedAt))):'Mustandit ei ole veel salvestatud.'}</div>
+    <div id="kContractDraftState" class="status-msg">${current?.status==='mustand'?'Mustand on serverisse salvestatud.':'Mustandit ei ole veel salvestatud.'}</div>
     <form id="kContractForm" onsubmit="kSendContract(event,'${esc(b.id)}')">
       <div class="field-grid">${kField('Lepinguline hind €','kContractPrice',price,'number','required min="0" max="1000000" step="0.01"')}${kField('Hinna märkus','kContractPriceNote',priceNote,'text','maxlength="1200"')}</div>
       ${kText('Hinna sees','kContractIncluded',included,'maxlength="4000" placeholder="Näiteks: ruum, lauad ja toolid…"')}
@@ -428,7 +427,7 @@ function kOpenContract(bookingId){
       ${kText('Tühistamise tingimused','kContractCancellation',cancellation,'required maxlength="5000"')}
       ${kText('Üldtingimused','kContractGeneral',general,'required maxlength="10000"')}
       <p class="hint">Saatmisel lukustatakse see lepinguversioon. Klient saab personaalse lingi e-postile ja pärast kinnitamist PDF-koopia.</p>
-      <div class="row-actions"><button class="button outline" type="button" onclick="kSaveContractDraft('${esc(b.id)}')">Salvesta mustand</button><button class="button" id="kContractSend" type="submit">Saada kliendile kinnitamiseks</button><button class="button outline" type="button" onclick="kCloseContractDialog()">Sulge ilma salvestamata</button></div><div id="kContractMessage" class="status-msg" aria-live="polite"></div>
+      <div class="row-actions"><button class="button outline" id="kContractDraftSave" type="button" onclick="kSaveContractDraft('${esc(b.id)}')">Salvesta mustand</button><button class="button" id="kContractSend" type="submit">Saada kliendile kinnitamiseks</button><button class="button outline" type="button" onclick="kCloseContractDialog()">Sulge ilma salvestamata</button></div><div id="kContractMessage" class="status-msg" aria-live="polite"></div>
     </form>`;
   }
   document.body.appendChild(dialog);
@@ -441,7 +440,7 @@ async function kSendContract(ev,bookingId){
   ev.preventDefault();const button=$('kContractSend');button.disabled=true;kNotice('kContractMessage','Koostan lepinguversiooni ja saadan kliendile…');
   try{
     const result=await post({action:'sendContract',bookingId,price:Number($('kContractPrice').value),priceNote:$('kContractPriceNote').value.trim(),included:$('kContractIncluded').value.trim(),specialTerms:$('kContractSpecial').value.trim(),cancellationTerms:$('kContractCancellation').value.trim(),generalTerms:$('kContractGeneral').value.trim()});
-    kClearContractDraft(bookingId);kNotice('kContractMessage',result.message);await kLoadWorkspace(true);await kLoadWorkspaceSection('contracts',true);setTimeout(()=>{$('kContractDialog')?.close();kRenderStaff();},700);
+    kNotice('kContractMessage',result.message);await kLoadWorkspace(true);await kLoadWorkspaceSection('contracts',true);setTimeout(()=>{$('kContractDialog')?.close();kRenderStaff();},700);
   }catch(e){kNotice('kContractMessage',e.message,true);button.disabled=false;}
 }
 async function kResendContractPdf(contractId){
@@ -474,6 +473,7 @@ function kBookingItemHTML(b){
   if(manager()&&external&&active&&!contractsReady)primary='<button class="button outline small" disabled>Kontrollin lepingu olekut…</button>';
   else if(manager()&&external&&active){
     if(contract?.status==='kinnitatud'||contract?.status==='saadetud')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">${contract.status==='kinnitatud'?'Vaata lepingut':'Vaata / muuda lepingut'}</button>`;
+    else if(contract?.status==='mustand')primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Jätka lepingut</button>`;
     else if(contractRequired)primary=`<button class="button small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;
     else{const pending=['ootel','pending'].includes(status);primary=(pending?`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita broneering</button>`:'')+`<button class="button outline small" onclick="kOpenContract('${esc(b.id)}')">Koosta leping</button>`;}
   }else if(manager()&&['ootel','pending'].includes(status))primary=`<button class="button small" onclick="kApproveLegacy('${esc(b.id)}')">Kinnita</button>`;
