@@ -211,8 +211,17 @@ async function kLoadWorkspaceSection(section,force=false){
       throw new Error('SERVER_UPDATE_REQUIRED');
     }
     if(section==='bookings'){
-      kWorkspace.bookings=result.bookings||[];kWorkspace.bookingSeries=result.series||[];kWorkspace.organizationSummary=result.organizationSummary||null;
-      kWorkspace.bookingsAll=[];if(kWorkspace._loadedSections)delete kWorkspace._loadedSections.bookingsAll;
+      const raw=result.bookings||[];
+      if(Array.isArray(result.series)){kWorkspace.bookings=raw;kWorkspace.bookingSeries=result.series;}
+      else{
+        kWorkspace.bookingSeries=kBuildSeriesFromBookings(raw);
+        const ids=new Set(kWorkspace.bookingSeries.map(x=>x.seriesId));
+        kWorkspace.bookings=raw.filter(x=>!ids.has(String(x.seriesId||'')));
+        kWorkspace.bookingsAll=raw;
+        kWorkspace._loadedSections.bookingsAll=true;
+      }
+      kWorkspace.organizationSummary=result.organizationSummary||null;
+      if(Array.isArray(result.series)){kWorkspace.bookingsAll=[];if(kWorkspace._loadedSections)delete kWorkspace._loadedSections.bookingsAll;}
       Object.keys(kSeriesOccurrenceCache).forEach(key=>delete kSeriesOccurrenceCache[key]);
     }
     if(section==='bookingsAll'){kWorkspace.bookingsAll=result.bookingsAll||[];kWorkspace.organizationSummary=result.organizationSummary||kWorkspace.organizationSummary||null;}
@@ -503,6 +512,15 @@ function kBookingItemHTML(b){
   return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
 }
 
+function kBuildSeriesFromBookings(list){
+  const map=new Map();
+  (list||[]).filter(b=>b.seriesId).forEach(b=>{const id=String(b.seriesId);if(!map.has(id))map.set(id,[]);map.get(id).push(b);});
+  return [...map.entries()].map(([seriesId,items])=>{
+    items.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+    const active=items.filter(kBookingActive),sample=active[0]||items[0],next=active.find(b=>b.date>=etDate())||active[0]||items[0],first=active[0]||items[0],last=active.at(-1)||items.at(-1);
+    return {seriesId,totalCount:items.length,activeCount:active.length,cancelledCount:items.length-active.length,dates:items.map(b=>b.date),activeDates:active.map(b=>b.date),firstDate:first?.date||'',lastDate:last?.date||'',nextBooking:next||null,collectiveId:sample?.collectiveId||'',collective:sample?.collective||'',publicTitle:sample?.publicTitle||'',roomId:sample?.roomId||'',roomName:sample?.roomName||'',startTime:sample?.startTime||'',endTime:sample?.endTime||'',type:sample?.type||'',status:sample?.status||''};
+  });
+}
 function kSeriesMatchesFilters(item,from,to,group,showCancelled){
   if(group&&item.collectiveId!==group)return false;
   const dates=(showCancelled?(item.dates||[]):(item.activeDates||[]));
