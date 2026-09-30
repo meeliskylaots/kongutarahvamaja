@@ -461,11 +461,22 @@ async function kResendContractPdf(contractId){
 
 
 let kBookingViewMode='overview';
+const kSeriesOccurrenceCache={};
 try{kBookingViewMode=sessionStorage.getItem('culturehub_booking_view_v1:'+ORG.id+':'+HOUSE.id)||'overview';}catch(e){}
 function kSetBookingView(mode){
   kBookingViewMode=['overview','series','all'].includes(mode)?mode:'overview';
   try{sessionStorage.setItem('culturehub_booking_view_v1:'+ORG.id+':'+HOUSE.id,kBookingViewMode);}catch(e){}
+  if(kBookingViewMode==='all'&&!kSectionLoaded('bookingsAll')){
+    const list=$('kBookingList');if(list)list.innerHTML='<p class="loading">Laadin üksikkirjeid ainult selle vaate jaoks…</p>';
+    kLoadWorkspaceSection('bookingsAll').then(()=>kRenderBookings()).catch(e=>{if(list)list.innerHTML='<p class="status-msg error">'+esc(e.message||'Kirjeid ei saanud laadida.')+'</p>';});
+    return;
+  }
   kRenderBookings();
+}
+function kFindBooking(id){
+  const pools=[kWorkspace?.bookings||[],kWorkspace?.bookingsAll||[],...Object.values(kSeriesOccurrenceCache)];
+  for(const pool of pools){const found=(pool||[]).find(x=>x.id===id);if(found)return found;}
+  return null;
 }
 function kBookingsHTML(){return `<section class="panel"><div class="panel-header"><div><h2>Proovid ja sündmused</h2><p class="hint">Korduvad proovid on vaikimisi koondatud üheks graafikuks.</p></div><button class="button small" onclick="kNewSchedule()">${manager()?'Lisa proov või üritus':'Lisa oma kollektiivi proov'}</button></div>
 <nav class="k-tabs" aria-label="Kalendrivaate valik"><button class="button ${kBookingViewMode==='overview'?'':'outline'} small" onclick="kSetBookingView('overview')">Ülevaade</button><button class="button ${kBookingViewMode==='series'?'':'outline'} small" onclick="kSetBookingView('series')">Korduvad proovid</button><button class="button ${kBookingViewMode==='all'?'':'outline'} small" onclick="kSetBookingView('all')">Kõik kirjed</button></nav>
@@ -491,33 +502,61 @@ function kBookingItemHTML(b){
   const actions=!active?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>${primary}`;
   return `<article class="booking-row"><div class="booking-row-top"><div><h3>${esc(b.publicTitle||b.collective||'Ruum kasutuses')}</h3><p>${esc(kDateLabel(b.date))} · ${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p>${external?`<p>${esc(b.name)} · ${esc(b.email)}${b.phone?' · '+esc(b.phone):''}</p>`:''}${policy}${contractInfo}</div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${actions}</div></article>`;
 }
-function kSeriesGroups(list){
-  const map=new Map();list.filter(b=>b.seriesId&&b.collectiveId).forEach(b=>{if(!map.has(b.seriesId))map.set(b.seriesId,[]);map.get(b.seriesId).push(b);});
-  return [...map.entries()].map(([seriesId,items])=>({seriesId,items:items.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime))})).sort((a,b)=>(a.items[0]?.date||'').localeCompare(b.items[0]?.date||''));
+
+function kSeriesMatchesFilters(item,from,to,group,showCancelled){
+  if(group&&item.collectiveId!==group)return false;
+  const dates=(showCancelled?(item.dates||[]):(item.activeDates||[]));
+  if(dates.length)return dates.some(d=>(!from||d>=from)&&(!to||d<=to));
+  if(!showCancelled&&Number(item.activeCount||0)===0)return false;
+  return (!from||String(item.lastDate||'')>=from)&&(!to||String(item.firstDate||'')<=to);
 }
-function kSeriesSummaryHTML(group){
-  const items=group.items,active=items.filter(kBookingActive),sample=active[0]||items[0],next=active.find(b=>b.date>=etDate())||active[0]||items[0],first=active[0]||items[0],last=active.at(-1)||items.at(-1);
-  const weekday=['','esmaspäeviti','teisipäeviti','kolmapäeviti','neljapäeviti','reedeti','laupäeviti','pühapäeviti'][kIsoWeekday(sample.date)]||'iga nädal',cancelled=items.length-active.length;
-  const details=items.map(b=>`<div class="booking-row" style="margin:10px 0"><div class="booking-row-top"><div><strong>${esc(kDateLabel(b.date))}</strong><p>${esc(b.startTime)}–${esc(b.endTime)} · ${esc(b.roomName)}</p></div><span class="badge ${b.status==='kinnitatud'?'good':''}">${esc(b.status)}</span></div><div class="row-actions">${kBookingActive(b)?`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','edit')">Muuda</button><button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','cancel')">Tühista</button>`:`<button class="button outline small" onclick="kOpenEdit('${esc(b.id)}','restore')">Taasta</button>`}</div></div>`).join('');
-  return `<article class="booking-row"><div class="booking-row-top"><div><span class="eyebrow">Korduv proov</span><h3>${esc(sample.collective||sample.publicTitle||'Proovigraafik')}</h3><p><strong>${esc(weekday)}</strong> · ${esc(sample.startTime)}–${esc(sample.endTime)} · ${esc(sample.roomName)}</p><p class="hint">${esc(kDateLabel(first.date))} – ${esc(kDateLabel(last.date))} · ${active.length} aktiivset korda${cancelled?' · '+cancelled+' tühistatud':''}</p>${next&&next.date>=etDate()?`<p class="hint"><strong>Järgmine:</strong> ${esc(kDateLabel(next.date))} · ${esc(next.startTime)}</p>`:''}</div><span class="badge good">graafik</span></div><div class="row-actions"><button class="button small" onclick="kOpenSeriesEdit('${esc(group.seriesId)}')">Muuda graafikut</button></div><details class="k-activity"><summary>Näita kõiki kordi (${items.length})</summary><div class="k-activity-fields">${details}</div></details></article>`;
+function kSeriesBoxId(seriesId){return 'kSeriesOccurrences_'+String(seriesId||'').replace(/[^A-Za-z0-9_-]/g,'_');}
+function kRenderSeriesOccurrences(seriesId){
+  const box=$(kSeriesBoxId(seriesId));if(!box)return;
+  const items=kSeriesOccurrenceCache[seriesId]||[];
+  box.innerHTML=items.length?items.map(kBookingItemHTML).join(''):'<p class="muted">Selle seeria kirjeid ei ole.</p>';
+}
+async function kLoadSeriesOccurrences(seriesId,force=false){
+  const box=$(kSeriesBoxId(seriesId));
+  if(kSeriesOccurrenceCache[seriesId]&&!force){kRenderSeriesOccurrences(seriesId);return;}
+  if(box)box.innerHTML='<p class="loading">Laadin selle graafiku kordi…</p>';
+  try{
+    const result=await jsonp({action:'houseSeriesOccurrences',session:staffToken,seriesId});
+    if(!result?.ok)throw new Error(result?.error||'Proovikordi ei saanud laadida.');
+    kSeriesOccurrenceCache[seriesId]=result.bookings||[];kRenderSeriesOccurrences(seriesId);
+  }catch(e){if(box)box.innerHTML=`<p class="status-msg error">${esc(e.message||'Proovikordi ei saanud laadida.')}</p><button class="button outline small" onclick="kLoadSeriesOccurrences('${esc(seriesId)}',true)">Proovi uuesti</button>`;}
+}
+function kSeriesSummaryHTML(item){
+  const sample=item.nextBooking||{},date=sample.date||item.firstDate||etDate();
+  const weekday=['','esmaspäeviti','teisipäeviti','kolmapäeviti','neljapäeviti','reedeti','laupäeviti','pühapäeviti'][kIsoWeekday(date)]||'iga nädal';
+  const title=item.collective||item.publicTitle||'Proovigraafik';
+  const total=Number(item.totalCount||0),active=Number(item.activeCount||0),cancelled=Number(item.cancelledCount||0);
+  return `<article class="booking-row"><div class="booking-row-top"><div><span class="eyebrow">Korduv graafik</span><h3>${esc(title)}</h3><p><strong>${esc(weekday)}</strong> · ${esc(item.startTime||sample.startTime||'')}–${esc(item.endTime||sample.endTime||'')} · ${esc(item.roomName||sample.roomName||'')}</p><p class="hint">${esc(kDateLabel(item.firstDate))} – ${esc(kDateLabel(item.lastDate))} · ${active} aktiivset korda${cancelled?' · '+cancelled+' tühistatud':''}</p>${sample.date&&sample.date>=etDate()?`<p class="hint"><strong>Järgmine:</strong> ${esc(kDateLabel(sample.date))} · ${esc(sample.startTime)}</p>`:''}</div><span class="badge good">graafik</span></div><div class="row-actions"><button class="button small" onclick="kOpenSeriesEdit('${esc(item.seriesId)}')">Muuda graafikut</button></div><details class="k-activity" ontoggle="if(this.open)kLoadSeriesOccurrences('${esc(item.seriesId)}')"><summary>Näita kõiki kordi (${total})</summary><div class="k-activity-fields" id="${kSeriesBoxId(item.seriesId)}"><p class="muted">Korrad laaditakse alles avamisel.</p></div></details></article>`;
 }
 function kOpenSeriesEdit(seriesId){
-  const items=(kWorkspace.bookings||[]).filter(b=>b.seriesId===seriesId&&kBookingActive(b)).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime)),target=items.find(b=>b.date>=etDate())||items[0];if(!target)return;
+  const item=(kWorkspace.bookingSeries||[]).find(x=>x.seriesId===seriesId),target=item?.nextBooking;if(!target)return;
+  kSeriesOccurrenceCache[seriesId]=[target,...(kSeriesOccurrenceCache[seriesId]||[]).filter(x=>x.id!==target.id)];
   kOpenEdit(target.id,'edit');setTimeout(()=>{if($('kEditScope'))$('kEditScope').value='following';},0);
 }
 function kRenderBookings(){
   const from=$('kListFrom')?.value||etDate(),to=$('kListTo')?.value||kSeasonRange(etDate()).end,group=$('kListCollective')?.value||'',cancelled=!!$('kShowCancelled')?.checked;
-  const list=(kWorkspace.bookings||[]).filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||kBookingActive(b))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
-  const seriesGroups=kSeriesGroups(list),seriesIds=new Set(seriesGroups.map(g=>g.seriesId)),singles=list.filter(b=>!seriesIds.has(b.seriesId)),attention=singles.filter(kBookingNeedsAttention),regularSingles=singles.filter(b=>!kBookingNeedsAttention(b));
+  if(kBookingViewMode==='all'&&!kSectionLoaded('bookingsAll')){
+    $('kBookingCount').textContent='Kõik üksikkirjed laaditakse ainult vajadusel.';
+    $('kBookingList').innerHTML='<p class="loading">Laadin üksikkirjeid…</p>';kLoadWorkspaceSection('bookingsAll').then(()=>kRenderBookings()).catch(e=>{$('kBookingList').innerHTML=`<p class="status-msg error">${esc(e.message)}</p>`;});return;
+  }
+  const source=kBookingViewMode==='all'?(kWorkspace.bookingsAll||[]):(kWorkspace.bookings||[]);
+  const list=source.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||kBookingActive(b))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const series=(kWorkspace.bookingSeries||[]).filter(item=>kSeriesMatchesFilters(item,from,to,group,cancelled));
+  const attention=list.filter(kBookingNeedsAttention),regularSingles=list.filter(b=>!kBookingNeedsAttention(b));
   let html='';
   if(kBookingViewMode==='all'){
-    $('kBookingCount').textContent=`Valikus ${list.length} üksikkirjet. Siin on nähtavad ka kõik korduvate proovide kuupäevad.`;html=list.map(kBookingItemHTML).join('');
+    $('kBookingCount').textContent=`Valikus ${list.length} üksikkirjet. See detailvaade laaditakse ainult siis, kui seda vajad.`;html=list.map(kBookingItemHTML).join('');
   }else if(kBookingViewMode==='series'){
-    $('kBookingCount').textContent=`${seriesGroups.length} korduvat proovigraafikut. Detailid avanevad graafiku kaardilt.`;html=seriesGroups.map(kSeriesSummaryHTML).join('')||'<p class="muted">Selles ajavahemikus korduvaid proove pole.</p>';
+    $('kBookingCount').textContent=`${series.length} korduvat graafikut. Üksikud korrad laaditakse alles graafiku avamisel.`;html=series.map(kSeriesSummaryHTML).join('')||'<p class="muted">Selles ajavahemikus korduvaid graafikuid pole.</p>';
   }else{
-    $('kBookingCount').textContent=`${attention.length} tähelepanu vajavat · ${seriesGroups.length} korduvat graafikut · ${regularSingles.length} muud üksikkirjet.`;
+    $('kBookingCount').textContent=`${attention.length} tähelepanu vajavat · ${series.length} korduvat graafikut · ${regularSingles.length} muud üksikkirjet.`;
     if(attention.length)html+=`<div class="panel-header" style="margin-top:14px"><h3>Tähelepanu vajavad</h3><span class="badge">${attention.length}</span></div>`+attention.map(kBookingItemHTML).join('');
-    if(seriesGroups.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Korduvad proovid</h3><span class="badge">${seriesGroups.length} graafikut</span></div>`+seriesGroups.map(kSeriesSummaryHTML).join('');
+    if(series.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Korduvad proovid</h3><span class="badge">${series.length} graafikut</span></div>`+series.map(kSeriesSummaryHTML).join('');
     if(regularSingles.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Ühekordsed sündmused ja kasutused</h3><span class="badge">${regularSingles.length}</span></div>`+regularSingles.map(kBookingItemHTML).join('');
     if(!html)html='<p class="muted">Selles ajavahemikus kirjeid pole.</p>';
   }
@@ -580,7 +619,7 @@ async function kCommitSchedule(){
 }
 
 function kOpenEdit(id,operation){
-  const b=kWorkspace.bookings.find(x=>x.id===id);if(!b)return;kEditing={booking:b,operation};kEditPending=null;
+  const b=kFindBooking(id);if(!b)return;kEditing={booking:b,operation};kEditPending=null;
   $('kEditDialog')?.remove();const dialog=document.createElement('dialog');dialog.id='kEditDialog';dialog.className='k-dialog';dialog.setAttribute('aria-labelledby','kEditHeading');
   const label={edit:'Muuda kalendrikirjet',cancel:'Tühista kalendrikirje',restore:'Taasta kalendrikirje'}[operation];
   dialog.innerHTML=`<div class="panel-header"><h2 id="kEditHeading">${label}</h2><button type="button" class="text-link" onclick="$('kEditDialog').close()">Sulge</button></div><p>${esc(b.publicTitle||b.collective||'Ruum kasutuses')} · ${esc(kDateLabel(b.date))}</p><form id="kEditForm" onsubmit="kPreviewEdit(event)"><label class="field"><span>Muudatuse ulatus</span><select id="kEditScope"><option value="one">Ainult see kord</option>${b.seriesId?'<option value="following">See ja järgnevad korrad</option><option value="all">Kogu seeria</option>':''}</select></label>${operation==='edit'?`<div class="field-grid">${kField('Kuupäev','kEditDate',b.date,'date','required')}<label class="field"><span>Ruum</span><select id="kEditRoom" required>${kRoomOptions(b.roomId)}</select></label></div><p class="hint">Seeria kuupäeva muutmisel nihkuvad valitud korrad sama arvu päevade võrra.</p><div class="field-grid">${kField('Algusaeg','kEditStart',b.startTime,'time','required')}${kField('Lõpuaeg','kEditEnd',b.endTime,'time','required')}</div>${b.collectiveId?'':kField('Nimetus','kEditTitle',b.publicTitle,'text','required maxlength="160"')}${b.collectiveId?'':`<h3 style="font:700 15px Manrope;margin:18px 0 10px">Avalik sündmuse info</h3>${kText('Lühikirjeldus','kEditPublicDescription',b.publicDescription||'','maxlength="600"')}${kImageControl('Sündmuse pilt',b.imageUrl||'','event',b.id,{id:'kEditImageUrl'})}<div class="field-grid">${kField('Piletimüügi link','kEditTicketUrl',b.ticketUrl||'','url','maxlength="500" placeholder="https://…"')}${kField('Sotsiaalmeedia / Facebooki sündmuse link','kEditSocialUrl',b.socialUrl||'','url','maxlength="500" placeholder="https://…"')}</div>${kField('Lisainfo link','kEditInfoUrl',b.infoUrl||'','url','maxlength="500" placeholder="https://…"')}`}<label class="service-option"><input id="kEditPublic" type="checkbox" ${b.publicEvent?'checked':''}><span>${b.collectiveId?'Näita nimetust avalikus kalendris':'Näita sündmust avalikul sündmuste lehel'}</span></label>${kText('Lisainfo','kEditNotes',b.notes,'maxlength="1500"')}`:`<p class="hint">${operation==='cancel'?'Tühistamine vabastab ruumi. Kirjed säilivad ja neid saab hiljem taastada.':'Taastamisel kontrollitakse kõiki valitud aegu uuesti koos puhvriga.'}</p>`}${kNotify('kNotifyEdit')}<button class="button" id="kEditPreview" type="submit">Vaata muudatus üle</button><div id="kEditMessage" class="status-msg" aria-live="polite"></div><div id="kEditReview" aria-live="polite"></div></form>`;
