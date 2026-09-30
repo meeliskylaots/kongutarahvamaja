@@ -331,7 +331,8 @@ function kOrganizationSummaryHTML(){
 }
 function kLeaderQuickHTML(){
   const own=kWorkspace?.collectives||[];if(!own.length)return '';
-  const future=(kWorkspace?.bookings||[]).filter(b=>b.date>=etDate()&&b.status!=='tühistatud').sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const seriesNext=(kWorkspace?.bookingSeries||[]).map(x=>x.nextBooking).filter(Boolean);
+  const future=[...(kWorkspace?.bookings||[]),...seriesNext].filter(b=>b.date>=etDate()&&b.status!=='tühistatud').sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
   const next=future[0],names=own.map(c=>c.name).join(' · ');
   return `<section class="panel" style="margin:14px 0"><span class="eyebrow">${own.length===1?'Minu kollektiiv':'Minu kollektiivid'}</span><h2 style="margin:6px 0 8px">${esc(names)}</h2>${next?`<p><strong>Järgmine proov:</strong> ${esc(next.collective||next.publicTitle||'Proov')} · ${esc(kDateLabel(next.date))} · ${esc(next.startTime)}–${esc(next.endTime)} · ${esc(next.roomName||'')}</p>`:'<p class="hint">Tulevast proovi kalendris ei ole.</p>'}<div class="row-actions">${next?`<button class="button small" onclick="kOpenEdit('${esc(next.id)}','edit')">Muuda järgmist proovi</button><button class="button outline small" onclick="kOpenEdit('${esc(next.id)}','cancel')">Jäta proov ära</button>`:''}<button class="button outline small" onclick="kStaffTab='collectives';kRenderStaff()">Muuda kollektiivi infot</button></div></section>`;
 }
@@ -423,7 +424,7 @@ async function kSaveContractDraft(bookingId){
   finally{if(button)button.disabled=false;}
 }
 function kOpenContract(bookingId){
-  const b=kWorkspace.bookings.find(x=>x.id===bookingId);if(!b)return;
+  const b=kFindBooking(bookingId);if(!b)return;
   const current=kContractForBooking(bookingId);
   $('kContractDialog')?.remove();const dialog=document.createElement('dialog');dialog.id='kContractDialog';dialog.className='k-dialog';dialog.setAttribute('aria-labelledby','kContractHeading');
   if(current?.status==='kinnitatud'){
