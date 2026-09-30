@@ -656,7 +656,9 @@ function kBuildDates(start,end,weekday,excluded=[],includePast=false,today=etDat
   if(!dates.length)throw new Error('Valikus pole lisatavaid kuupäevi.');return {dates,skippedPast};
 }
 function kBuildEventOccurrences(startDate,endDate,startTime,endTime,includePast=false){
-  const end=endDate||startDate,{dates,skippedPast}=kBuildDates(startDate,end,null,[],includePast);
+  const end=endDate||startDate;
+  if(end===startDate&&startTime&&endTime&&endTime<=startTime)throw new Error('Kui sündmus läheb üle südaöö, vali järgmine lõppkuupäev.');
+  const {dates,skippedPast}=kBuildDates(startDate,end,null,[],includePast);
   let usable=dates.slice();
   if(end>startDate&&endTime==='00:00')usable=usable.slice(0,-1);
   if(!usable.length)throw new Error('Kontrolli sündmuse lõppkuupäeva ja lõpuaega.');
