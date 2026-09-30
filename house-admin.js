@@ -495,9 +495,9 @@ try{kBookingViewMode=sessionStorage.getItem('culturehub_booking_view_v1:'+ORG.id
 function kSetBookingView(mode){
   kBookingViewMode=['overview','series','all'].includes(mode)?mode:'overview';
   try{sessionStorage.setItem('culturehub_booking_view_v1:'+ORG.id+':'+HOUSE.id,kBookingViewMode);}catch(e){}
-  if(kBookingViewMode==='all'&&!kSectionLoaded('bookingsAll')){
-    const list=$('kBookingList');if(list)list.innerHTML='<p class="loading">Laadin üksikkirjeid ainult selle vaate jaoks…</p>';
-    kLoadWorkspaceSection('bookingsAll').then(()=>kRenderBookings()).catch(e=>{if(list)list.innerHTML='<p class="status-msg error">'+esc(e.message||'Kirjeid ei saanud laadida.')+'</p>';});
+  if(kBookingViewMode==='all'&&Array.isArray(kWorkspace?.bookingSeries)&&!kSectionLoaded('bookingsall')){
+    const list=$('kBookingList'),stop=list?kBeginTimedLoader(list,'Laadin kõiki üksikkirjeid…'):()=>{};
+    kLoadWorkspaceSection('bookingsall').then(()=>{stop();kRenderBookings()}).catch(e=>{stop();if(list)list.innerHTML='<p class="status-msg error">'+esc(e.message||'Kirjeid ei saanud laadida.')+'</p>';});
     return;
   }
   kRenderBookings();
@@ -557,12 +557,14 @@ function kRenderSeriesOccurrences(seriesId){
 async function kLoadSeriesOccurrences(seriesId,force=false){
   const box=$(kSeriesBoxId(seriesId));
   if(kSeriesOccurrenceCache[seriesId]&&!force){kRenderSeriesOccurrences(seriesId);return;}
-  if(box)box.innerHTML='<p class="loading">Laadin selle graafiku kordi…</p>';
+  const stop=box?kBeginTimedLoader(box,'Laadin selle graafiku kordi…'):()=>{};
   try{
     const result=await jsonp({action:'houseSeriesOccurrences',session:staffToken,seriesId});
     if(!result?.ok)throw new Error(result?.error||'Proovikordi ei saanud laadida.');
-    kSeriesOccurrenceCache[seriesId]=result.bookings||[];kRenderSeriesOccurrences(seriesId);
-  }catch(e){if(box)box.innerHTML=`<p class="status-msg error">${esc(e.message||'Proovikordi ei saanud laadida.')}</p><button class="button outline small" onclick="kLoadSeriesOccurrences('${esc(seriesId)}',true)">Proovi uuesti</button>`;}
+    kSeriesOccurrenceCache[seriesId]=result.bookings||[];
+    for(const b of kSeriesOccurrenceCache[seriesId])if(b?.id&&!kWorkspace.bookings.some(x=>x.id===b.id))kWorkspace.bookings.push(b);
+    stop();kRenderSeriesOccurrences(seriesId);
+  }catch(e){stop();if(box)box.innerHTML=`<p class="status-msg error">${esc(e.message||'Proovikordi ei saanud laadida.')}</p><button class="button outline small" onclick="kLoadSeriesOccurrences('${esc(seriesId)}',true)">Proovi uuesti</button>`;}
 }
 function kSeriesSummaryHTML(item){
   const sample=item.nextBooking||{},date=sample.date||item.firstDate||etDate();
@@ -572,19 +574,24 @@ function kSeriesSummaryHTML(item){
   return `<article class="booking-row"><div class="booking-row-top"><div><span class="eyebrow">Korduv graafik</span><h3>${esc(title)}</h3><p><strong>${esc(weekday)}</strong> · ${esc(item.startTime||sample.startTime||'')}–${esc(item.endTime||sample.endTime||'')} · ${esc(item.roomName||sample.roomName||'')}</p><p class="hint">${esc(kDateLabel(item.firstDate))} – ${esc(kDateLabel(item.lastDate))} · ${active} aktiivset korda${cancelled?' · '+cancelled+' tühistatud':''}</p>${sample.date&&sample.date>=etDate()?`<p class="hint"><strong>Järgmine:</strong> ${esc(kDateLabel(sample.date))} · ${esc(sample.startTime)}</p>`:''}</div><span class="badge good">graafik</span></div><div class="row-actions"><button class="button small" onclick="kOpenSeriesEdit('${esc(item.seriesId)}')">Muuda graafikut</button></div><details class="k-activity" ontoggle="if(this.open)kLoadSeriesOccurrences('${esc(item.seriesId)}')"><summary>Näita kõiki kordi (${total})</summary><div class="k-activity-fields" id="${kSeriesBoxId(item.seriesId)}"><p class="muted">Korrad laaditakse alles avamisel.</p></div></details></article>`;
 }
 function kOpenSeriesEdit(seriesId){
-  const item=(kWorkspace.bookingSeries||[]).find(x=>x.seriesId===seriesId),target=item?.nextBooking;if(!target)return;
+  const available=Array.isArray(kWorkspace?.bookingSeries)?kWorkspace.bookingSeries:kBuildSeriesFromBookings(kWorkspace?.bookings||[]);
+  const item=available.find(x=>x.seriesId===seriesId),target=item?.nextBooking;if(!target)return;
   kSeriesOccurrenceCache[seriesId]=[target,...(kSeriesOccurrenceCache[seriesId]||[]).filter(x=>x.id!==target.id)];
+  if(!kWorkspace.bookings.some(x=>x.id===target.id))kWorkspace.bookings.push(target);
   kOpenEdit(target.id,'edit');setTimeout(()=>{if($('kEditScope'))$('kEditScope').value='following';},0);
 }
 function kRenderBookings(){
   const from=$('kListFrom')?.value||etDate(),to=$('kListTo')?.value||kSeasonRange(etDate()).end,group=$('kListCollective')?.value||'',cancelled=!!$('kShowCancelled')?.checked;
-  if(kBookingViewMode==='all'&&!kSectionLoaded('bookingsAll')){
+  const summaryMode=Array.isArray(kWorkspace?.bookingSeries);
+  if(kBookingViewMode==='all'&&summaryMode&&!kSectionLoaded('bookingsall')){
     $('kBookingCount').textContent='Kõik üksikkirjed laaditakse ainult vajadusel.';
-    $('kBookingList').innerHTML='<p class="loading">Laadin üksikkirjeid…</p>';kLoadWorkspaceSection('bookingsAll').then(()=>kRenderBookings()).catch(e=>{$('kBookingList').innerHTML=`<p class="status-msg error">${esc(e.message)}</p>`;});return;
+    const stop=kBeginTimedLoader($('kBookingList'),'Laadin kõiki üksikkirjeid…');
+    kLoadWorkspaceSection('bookingsall').then(()=>{stop();kRenderBookings()}).catch(e=>{stop();$('kBookingList').innerHTML=`<p class="status-msg error">${esc(e.message)}</p>`;});return;
   }
-  const source=kBookingViewMode==='all'?(kWorkspace.bookingsAll||[]):(kWorkspace.bookings||[]);
-  const list=source.filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||kBookingActive(b))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
-  const series=(kWorkspace.bookingSeries||[]).filter(item=>kSeriesMatchesFilters(item,from,to,group,cancelled));
+  const source=(kBookingViewMode==='all'&&summaryMode)?(kWorkspace.bookingsAll||[]):(kWorkspace.bookings||[]);
+  const list=source.filter(b=>!summaryMode||!b.seriesId||kBookingViewMode==='all').filter(b=>(!from||b.date>=from)&&(!to||b.date<=to)&&(!group||b.collectiveId===group)&&(cancelled||kBookingActive(b))).sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+  const seriesSource=summaryMode?kWorkspace.bookingSeries:kBuildSeriesFromBookings(kWorkspace.bookings||[]);
+  const series=seriesSource.filter(item=>kSeriesMatchesFilters(item,from,to,group,cancelled));
   const attention=list.filter(kBookingNeedsAttention),regularSingles=list.filter(b=>!kBookingNeedsAttention(b));
   let html='';
   if(kBookingViewMode==='all'){
