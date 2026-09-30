@@ -253,6 +253,9 @@ async function kLoadWorkspaceSection(section,force=false){
     if(sectionKey==='bookings'){
       kWorkspace.bookings=result.bookings||[];
       kWorkspace.bookingSeries=Array.isArray(result.series)?result.series:null;
+      kWorkspace.bookingsAll=[];
+      kWorkspace._loadedSections.bookingsall=false;
+      Object.keys(kSeriesOccurrenceCache).forEach(key=>delete kSeriesOccurrenceCache[key]);
       if(Array.isArray(result.series)){
         result.series.forEach(series=>{
           const b=series.nextBooking;
