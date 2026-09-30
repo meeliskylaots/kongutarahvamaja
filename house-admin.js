@@ -516,7 +516,7 @@ function kBuildSeriesFromBookings(list){
   const map=new Map();
   (list||[]).filter(b=>b.seriesId).forEach(b=>{const id=String(b.seriesId);if(!map.has(id))map.set(id,[]);map.get(id).push(b);});
   return [...map.entries()].map(([seriesId,items])=>{
-    items.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));
+    items.sort((a,b)=>(a.date+a.startTime).localeCompare(b.date+b.startTime));kSeriesOccurrenceCache[seriesId]=items;
     const active=items.filter(kBookingActive),sample=active[0]||items[0],next=active.find(b=>b.date>=etDate())||active[0]||items[0],first=active[0]||items[0],last=active.at(-1)||items.at(-1);
     return {seriesId,totalCount:items.length,activeCount:active.length,cancelledCount:items.length-active.length,dates:items.map(b=>b.date),activeDates:active.map(b=>b.date),firstDate:first?.date||'',lastDate:last?.date||'',nextBooking:next||null,collectiveId:sample?.collectiveId||'',collective:sample?.collective||'',publicTitle:sample?.publicTitle||'',roomId:sample?.roomId||'',roomName:sample?.roomName||'',startTime:sample?.startTime||'',endTime:sample?.endTime||'',type:sample?.type||'',status:sample?.status||''};
   });
