@@ -510,6 +510,10 @@ function kFindBooking(id){
 function kBookingsHTML(){return `<section class="panel"><div class="panel-header"><div><h2>Proovid ja sündmused</h2><p class="hint">Korduvad proovid on vaikimisi koondatud üheks graafikuks.</p></div><button class="button small" onclick="kNewSchedule()">${manager()?'Lisa proov või üritus':'Lisa oma kollektiivi proov'}</button></div>
 <nav class="k-tabs" aria-label="Kalendrivaate valik"><button class="button ${kBookingViewMode==='overview'?'':'outline'} small" onclick="kSetBookingView('overview')">Ülevaade</button><button class="button ${kBookingViewMode==='series'?'':'outline'} small" onclick="kSetBookingView('series')">Korduvad proovid</button><button class="button ${kBookingViewMode==='all'?'':'outline'} small" onclick="kSetBookingView('all')">Kõik kirjed</button></nav>
 <div class="k-filter-grid">${kField('Alates','kListFrom',etDate(),'date')}${kField('Kuni','kListTo',kSeasonRange(etDate()).end,'date')}<label class="field"><span>Kollektiiv</span><select id="kListCollective"><option value="">Kõik</option>${kWorkspace.collectives.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label><label class="service-option"><input type="checkbox" id="kShowCancelled"><span>Näita tühistatud kirjeid</span></label></div><button class="button outline small" onclick="kRenderBookings()">Näita valikut</button><p id="kBookingCount" class="hint"></p><div id="kBookingList" class="k-booking-list"></div></section>`;}
+function kServerTimingHint(section='bookings'){
+  const ms=Number(kWorkspace?._lastServerMs?.[String(section).toLowerCase()]);
+  return Number.isFinite(ms)&&ms>=0?` · server ${(ms/1000).toLocaleString('et-EE',{maximumFractionDigits:1})} s`:'';
+}
 function kBookingExternal(b){return manager()&&!b.collectiveId&&!!b.email&&String(b.type||'broneering').toLowerCase()==='broneering';}
 function kBookingActive(b){return !['tühistatud','tuhistatud','cancelled','canceled','rejected'].includes(String(b.status||'').toLowerCase().trim());}
 function kBookingNeedsAttention(b){
@@ -595,11 +599,11 @@ function kRenderBookings(){
   const attention=list.filter(kBookingNeedsAttention),regularSingles=list.filter(b=>!kBookingNeedsAttention(b));
   let html='';
   if(kBookingViewMode==='all'){
-    $('kBookingCount').textContent=`Valikus ${list.length} üksikkirjet. See detailvaade laaditakse ainult siis, kui seda vajad.`;html=list.map(kBookingItemHTML).join('');
+    $('kBookingCount').textContent=`Valikus ${list.length} üksikkirjet. See detailvaade laaditakse ainult siis, kui seda vajad.${kServerTimingHint('bookingsall')}`;html=list.map(kBookingItemHTML).join('');
   }else if(kBookingViewMode==='series'){
-    $('kBookingCount').textContent=`${series.length} korduvat graafikut. Üksikud korrad laaditakse alles graafiku avamisel.`;html=series.map(kSeriesSummaryHTML).join('')||'<p class="muted">Selles ajavahemikus korduvaid graafikuid pole.</p>';
+    $('kBookingCount').textContent=`${series.length} korduvat graafikut. Üksikud korrad laaditakse alles graafiku avamisel.${kServerTimingHint('bookings')}`;html=series.map(kSeriesSummaryHTML).join('')||'<p class="muted">Selles ajavahemikus korduvaid graafikuid pole.</p>';
   }else{
-    $('kBookingCount').textContent=`${attention.length} tähelepanu vajavat · ${series.length} korduvat graafikut · ${regularSingles.length} muud üksikkirjet.`;
+    $('kBookingCount').textContent=`${attention.length} tähelepanu vajavat · ${series.length} korduvat graafikut · ${regularSingles.length} muud üksikkirjet.${kServerTimingHint('bookings')}`;
     if(attention.length)html+=`<div class="panel-header" style="margin-top:14px"><h3>Tähelepanu vajavad</h3><span class="badge">${attention.length}</span></div>`+attention.map(kBookingItemHTML).join('');
     if(series.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Korduvad proovid</h3><span class="badge">${series.length} graafikut</span></div>`+series.map(kSeriesSummaryHTML).join('');
     if(regularSingles.length)html+=`<div class="panel-header" style="margin-top:24px"><h3>Ühekordsed sündmused ja kasutused</h3><span class="badge">${regularSingles.length}</span></div>`+regularSingles.map(kBookingItemHTML).join('');
