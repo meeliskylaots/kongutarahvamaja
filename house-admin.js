@@ -29,7 +29,7 @@ function kRestoreWorkspaceCache(token){
     return true;
   }catch(e){return false;}
 }
-const kLegacy = {renderStaff,loadCollectives,loadPublicHouse,showCalendarEntryForDate,loadCalendarCollectives,getQuote,updateQuote,renderBookingRoomInfo,submitBooking,post,logout};
+const kLegacy = {renderStaff,loadCollectives,loadPublicHouse,showCalendarEntryForDate,loadCalendarCollectives,getQuote,updateQuote,renderBookingRoomInfo,submitBooking,checkAvailability,post,logout};
 if(!document.getElementById('kDialogUxStyles')){
   const style=document.createElement('style');style.id='kDialogUxStyles';style.textContent='.k-dialog-sticky{position:sticky;top:-24px;z-index:5;background:var(--paper);padding:14px 0 12px;border-bottom:1px solid var(--line)}.k-dialog-close{width:44px;height:44px;flex:0 0 44px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:28px;line-height:1;cursor:pointer}.k-dialog-close:hover{background:var(--mint)}@media(max-width:720px){.k-dialog-sticky{top:-18px}.k-dialog-close{width:46px;height:46px;flex-basis:46px}.k-dialog .row-actions>.button{min-height:46px}}';document.head.appendChild(style);
 }
@@ -171,6 +171,18 @@ getQuote=function(){
   if($('serviceLights').checked)selected.push({label:'Valgustus',total:p.lights});
   if($('serviceTechnician').checked)selected.push({label:'Tehniline tugi',total:Math.max(p.technicianMinimum,hours)*(community?p.technicianCommunity:p.technicianCommercial)});
   const servicesTotal=selected.reduce((a,x)=>a+x.total,0);return{valid,hours,hourly,community,outdoor,room,roomCost,selected,servicesTotal,total:roomCost+servicesTotal};
+};
+checkAvailability=function(entries=bookingDayEntries){
+  const startDate=$('bookDate')?.value||'',endDate=$('bookEndDate')?.value||startDate,start=$('startTime')?.value||'',end=$('endTime')?.value||'';
+  if(endDate&&startDate&&endDate!==startDate){
+    updateQuote();
+    const q=getQuote(),status=$('availabilityStatus'),daily=$('bookingDayAvailability');
+    if(!q.valid){status.textContent='Kontrolli algus- ja lõppkuupäeva ning kellaaega.';status.classList.add('error');daily.textContent=status.textContent;daily.classList.add('error');$('submitBookingBtn').disabled=true;return;}
+    if(q.hours<(minimumUsageMinutes($('bookRoom').value)/60)){status.textContent='Kasutusaeg on valitud ruumi miinimumist lühem.';status.classList.add('error');daily.textContent=status.textContent;daily.classList.add('error');$('submitBookingBtn').disabled=true;return;}
+    status.textContent='Mitmepäevase või üle südaöö kasutuse kõik kuupäevad kontrollitakse serveris broneeringusoovi saatmisel.';
+    status.classList.remove('error');daily.textContent='Algus- ja lõppkuupäev on arvestatud. Lõplik saadavus kontrollitakse enne salvestamist.';daily.classList.remove('error');$('submitBookingBtn').disabled=false;return;
+  }
+  return kLegacy.checkAvailability(entries);
 };
 updateQuote=function(){
   if(!kSite)return kLegacy.updateQuote();const p=kSite.prices,q=getQuote(),room=q.room||rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();
