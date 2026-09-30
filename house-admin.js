@@ -40,6 +40,19 @@ const kDayNames = ['Esmaspäev','Teisipäev','Kolmapäev','Neljapäev','Reede','
 const kField = (label,id,value='',type='text',extra='') => `<label class="field"><span>${esc(label)}</span><input id="${id}" type="${type}" value="${esc(value)}" ${extra}></label>`;
 const kText = (label,id,value='',extra='') => `<label class="field"><span>${esc(label)}</span><textarea id="${id}" ${extra}>${esc(value)}</textarea></label>`;
 const kNotice = (id,text,error=false) => setMessage(id,text,error);
+function kBeginTimedLoader(target,label){
+  const el=typeof target==='string'?$(target):target;
+  if(!el)return ()=>{};
+  const started=performance.now();
+  const render=()=>{
+    if(!el.isConnected)return;
+    const seconds=Math.floor((performance.now()-started)/1000);
+    const extra=seconds<5?'':seconds<12?' Päring on endiselt töös.':' See võtab tavapärasest kauem, kuid serveri vastust oodatakse edasi.';
+    el.innerHTML=`<div class="loading"><strong>${esc(label)}</strong><p class="hint" style="margin-top:8px">Kestnud ${seconds} s.${extra}</p></div>`;
+  };
+  render();const timer=setInterval(render,1000);
+  return ()=>clearInterval(timer);
+}
 const kDateLabel = value => /^\d{4}-\d{2}-\d{2}$/.test(value||'') ? new Intl.DateTimeFormat('et-EE',{dateStyle:'medium'}).format(new Date(value+'T12:00:00')) : value;
 const kMoney = value => Number(value).toLocaleString('et-EE',{maximumFractionDigits:2});
 const kRoomOptions = selected => '<option value="">Vali ruum</option>'+rooms.filter(r=>manager()||staffUser?.allowedRoomIds?.includes(r.id)).map(r=>`<option value="${r.id}" ${r.id===selected?'selected':''}>${esc(r.name)}</option>`).join('');
@@ -198,42 +211,48 @@ const kSectionRequests={};
 function kSectionLoaded(section){return !!kWorkspace?._loadedSections?.[section]}
 async function kLoadWorkspaceSection(section,force=false){
   if(!kWorkspace)await kLoadWorkspace();
-  if(kSectionLoaded(section)&&!force)return kWorkspace;
-  if(kSectionRequests[section])return kSectionRequests[section];
+  const sectionKey=String(section||'').toLowerCase();
+  if(kSectionLoaded(sectionKey)&&!force)return kWorkspace;
+  if(kSectionRequests[sectionKey])return kSectionRequests[sectionKey];
   const token=staffToken;
-  kSectionRequests[section]=(async()=>{
-    const result=await jsonp({action:'houseWorkspaceSection',section,session:token});
+  kSectionRequests[sectionKey]=(async()=>{
+    const result=await jsonp({action:'houseWorkspaceSection',section:sectionKey,session:token});
     if(token!==staffToken)throw new Error('Seanss muutus. Ava töölaud uuesti.');
     if(!result?.ok)throw new Error(result?.error||'Töölauda ei saanud laadida.');
     kWorkspace._loadedSections=kWorkspace._loadedSections||{};
-    if(result.section!==section){
-      if(Object.prototype.hasOwnProperty.call(kWorkspace,section)){kWorkspace._loadedSections[section]=true;return kWorkspace;}
+    const returned=String(result.section||'').toLowerCase();
+    const compatible=(returned===sectionKey)||(sectionKey==='bookings'&&returned==='calendar')||(sectionKey==='bookingsall'&&returned==='bookingsall');
+    if(!compatible){
+      if(Object.prototype.hasOwnProperty.call(kWorkspace,sectionKey)){kWorkspace._loadedSections[sectionKey]=true;return kWorkspace;}
       throw new Error('SERVER_UPDATE_REQUIRED');
     }
-    if(section==='bookings'){
-      const raw=result.bookings||[];
-      if(Array.isArray(result.series)){kWorkspace.bookings=raw;kWorkspace.bookingSeries=result.series;}
-      else{
-        kWorkspace.bookingSeries=kBuildSeriesFromBookings(raw);
-        const ids=new Set(kWorkspace.bookingSeries.map(x=>x.seriesId));
-        kWorkspace.bookings=raw.filter(x=>!ids.has(String(x.seriesId||'')));
-        kWorkspace.bookingsAll=raw;
-        kWorkspace._loadedSections.bookingsAll=true;
+    kWorkspace._lastServerMs=kWorkspace._lastServerMs||{};
+    if(Number.isFinite(Number(result.serverMs)))kWorkspace._lastServerMs[sectionKey]=Number(result.serverMs);
+    if(sectionKey==='bookings'){
+      kWorkspace.bookings=result.bookings||[];
+      kWorkspace.bookingSeries=Array.isArray(result.series)?result.series:null;
+      if(Array.isArray(result.series)){
+        result.series.forEach(series=>{
+          const b=series.nextBooking;
+          if(b?.id&&!kWorkspace.bookings.some(x=>x.id===b.id))kWorkspace.bookings.push(b);
+        });
       }
       kWorkspace.organizationSummary=result.organizationSummary||null;
-      if(Array.isArray(result.series)){kWorkspace.bookingsAll=[];if(kWorkspace._loadedSections)delete kWorkspace._loadedSections.bookingsAll;}
-      Object.keys(kSeriesOccurrenceCache).forEach(key=>delete kSeriesOccurrenceCache[key]);
     }
-    if(section==='bookingsAll'){kWorkspace.bookingsAll=result.bookingsAll||[];kWorkspace.organizationSummary=result.organizationSummary||kWorkspace.organizationSummary||null;}
-    if(section==='ideas')kWorkspace.ideas=result.ideas||[];
-    if(section==='contracts')kWorkspace.contracts=result.contracts||[];
-    if(section==='users')kWorkspace.users=result.users||[];
-    if(section==='activity')kWorkspace.activity=result.activity||[];
-    kWorkspace._loadedSections[section]=true;kSaveWorkspaceCache();return kWorkspace;
+    if(sectionKey==='bookingsall')kWorkspace.bookingsAll=result.bookingsAll||[];
+    if(sectionKey==='ideas')kWorkspace.ideas=result.ideas||[];
+    if(sectionKey==='contracts')kWorkspace.contracts=result.contracts||[];
+    if(sectionKey==='users')kWorkspace.users=result.users||[];
+    if(sectionKey==='activity')kWorkspace.activity=result.activity||[];
+    kWorkspace._loadedSections[sectionKey]=true;kSaveWorkspaceCache();return kWorkspace;
   })();
-  try{return await kSectionRequests[section]}finally{delete kSectionRequests[section]}
+  try{return await kSectionRequests[sectionKey]}finally{delete kSectionRequests[sectionKey]}
 }
 async function kEnsureWorkspaceSection(section,force=false){
+  const active=(kStaffTab==='calendar'&&section==='bookings')||kStaffTab===section;
+  const root=active?$('kStaffSection'):null;
+  const labels={bookings:'Laadin kalendri kokkuvõtet…',ideas:'Laadin ideepanka…',users:'Laadin kasutajaid…',activity:'Laadin muudatusi…'};
+  const stop=root?kBeginTimedLoader(root,labels[section]||'Laadin andmeid…'):()=>{};
   try{
     await kLoadWorkspaceSection(section,force);
     if(!$('view-login')?.classList.contains('active'))return;
@@ -245,7 +264,7 @@ async function kEnsureWorkspaceSection(section,force=false){
     }else if(kStaffTab===section&&$('kStaffSection')){
       $('kStaffSection').innerHTML=`<p class="status-msg error">${esc(e.message||'Andmeid ei saanud laadida.')}</p><button class="button small" onclick="kEnsureWorkspaceSection('${section}',true)">Proovi uuesti</button>`;
     }
-  }
+  } finally { stop(); }
 }
 async function kLoadWorkspace(force=false){
   if(kWorkspace&&!force)return kWorkspace;if(kWorkspaceRequest)return kWorkspaceRequest;
@@ -277,9 +296,9 @@ renderStaff=async function(){
   if(!staffUser)return;
   $('loginForm').classList.add('hidden');$('staffPanel').classList.remove('hidden');$('staffPanel').parentElement.style.maxWidth='none';$('staffWelcome').textContent=`Tere, ${staffUser.name}`;
   if(kWorkspace){kRenderStaff();return;}
-  $('staffContent').innerHTML='<p class="loading">Laadin töölauda…</p>';
+  const stop=kBeginTimedLoader($('staffContent'),'Ühendan serveriga ja kontrollin ligipääsu…');
   try{
-    await kLoadWorkspace();kRenderStaff();
+    await kLoadWorkspace();stop();kRenderStaff();
   }catch(e){
     const msg=String(e?.message||'');
     if(e.message==='SERVER_UPDATE_REQUIRED'||/aegus|timeout|Andmete laadimine ebaõnnestus/i.test(msg)){
@@ -295,7 +314,7 @@ renderStaff=async function(){
       }
     }
     $('staffContent').innerHTML=`<p class="status-msg error">${esc(msg||'Töölauda ei saanud laadida.')}</p><button class="button small" onclick="renderStaff()">Proovi uuesti</button>`;
-  }
+  } finally { stop(); }
 };
 async function kReloadStaff(){
   if(!staffUser)return;
