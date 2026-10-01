@@ -1,5 +1,5 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),crypto=require('crypto');
-const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8'),scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
+const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8'),admin=fs.readFileSync(require('path').join(__dirname,'../house-admin.js'),'utf8'),scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
 const context={console,crypto:crypto.webcrypto,Intl,Date,URLSearchParams,TextEncoder,Uint8Array,window:{addEventListener(){}},document:{getElementById:()=>null}};vm.createContext(context);
 vm.runInContext(scripts[0],context);vm.runInContext(fs.readFileSync(require('path').join(__dirname,'../konguta-admin.js'),'utf8'),context);
 const run=s=>vm.runInContext(s,context);let n=0;function check(name,fn){fn();n++;console.log('PASS '+name)}
@@ -14,6 +14,16 @@ for(const s of scripts)new vm.Script(s);console.log(`${n} frontend checks passed
 check('Public event list excludes rehearsals, private bookings and pending events; calendar keeps all uses',()=>{
  const source=[{type:'Proov',publicEvent:true,publicTitle:'Kooriproov'},{type:'Sündmus',publicEvent:true,publicTitle:'Kontsert'},{type:'broneering',publicEvent:false,publicTitle:'Salajane sünnipäev'},{type:'Sündmus',publicEvent:true,status:'ootel',publicTitle:'Ootel üritus'}].map(x=>({roomId:'konguta-saal',date:'2027-10-01',startTime:'18:00',endTime:'20:00',status:'kinnitatud',...x}));
  const snapshot=context.publicCalendarUsages(source);assert.equal(snapshot.length,4);assert.equal(context.snapshotDay(snapshot,'2027-10-01').length,4);const events=context.upcomingPublicEvents(snapshot,'2027-09-28');assert.equal(events.length,1);assert.equal(events[0].title,'Kontsert');assert.equal(snapshot[2].title,'Ruum kasutuses');
+});
+check('Occupancy dates include preparation before events and cleanup after midnight',()=>{
+ const snapshot=context.publicCalendarUsages([{roomId:'konguta-saal',date:'2026-10-12',endDate:'2026-10-13',startTime:'18:00',endTime:'01:00',occupancyStartDate:'2026-10-12',occupancyStartTime:'15:00',occupancyEndDate:'2026-10-13',occupancyEndTime:'11:00',status:'kinnitatud',publicEvent:false}]);
+ const before=context.snapshotDay(snapshot,'2026-10-12','konguta-saal'),after=context.snapshotDay(snapshot,'2026-10-13','konguta-saal');
+ assert.equal(before.length,1);assert.equal(before[0].startTime,'15:00');assert.equal(before[0].endTime,'24:00');
+ assert.equal(after.length,1);assert.equal(after[0].startTime,'00:00');assert.equal(after[0].endTime,'11:00');
+ assert.equal(context.roomAvailability(before,'konguta-saal').code,'partial');
+});
+check('House admin exposes standalone occupancy, selected rooms and configurable whole-house scope',()=>{
+ new vm.Script(admin);assert.ok(admin.includes("function kOpenOccupancy(bookingId='',initialDate=etDate())"));assert.ok(admin.includes("scope==='rooms'"));assert.ok(admin.includes('occupancyRoomIds'));assert.ok(admin.includes('kEditOccupancyStartDate'));
 });
 check('Mobile menu ends with culture screen and keeps staff access in header',()=>{const nav=html.match(/<nav class="mobile-nav"[\s\S]*?<\/nav>/)[0];assert.ok(nav.indexOf('Huviringid')<nav.indexOf('Kultuuriekraan'));assert.ok(!nav.includes('Töötajale'));assert.ok(html.includes('mobile-staff'));});
 check('Back follows actual internal history and preserves in-memory booking fields',()=>{
