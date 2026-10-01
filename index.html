@@ -170,9 +170,8 @@
       for (const entry of entries) {
         const start = usageMinutes(entry.startTime), end = usageMinutes(entry.endTime);
         if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return { code: 'unknown', free: [] };
-        // A shared 60-minute gap between uses; do not add two buffers together.
-        const from = Math.max(CALENDAR_DAY_START, start - room.buffer);
-        const to = Math.min(CALENDAR_DAY_END, end + room.buffer);
+        const from = Math.max(CALENDAR_DAY_START, entry.occupancyExact ? start : start - room.buffer);
+        const to = Math.min(CALENDAR_DAY_END, entry.occupancyExact ? end : end + room.buffer);
         if (from < to) busy.push([from, to]);
       }
       busy.sort((a, b) => a[0] - b[0]);
@@ -184,7 +183,7 @@
       }
       if (cursor < CALENDAR_DAY_END) gaps.push([cursor, CALENDAR_DAY_END]);
       const free = gaps.filter(([from, to]) => to - from >= minimumUsageMinutes(roomId));
-      return { code: !free.length ? 'full' : entries.length ? 'partial' : 'free', free };
+      return { code: !free.length ? 'full' : busy.length ? 'partial' : 'free', free };
     }
     function publicCalendarUsages(usages) {
       if (!Array.isArray(usages)) throw new Error('Kalendriandmed puuduvad.');
@@ -195,7 +194,12 @@
           if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(date+'T12:00:00Z').getTime()) || new Date(date+'T12:00:00Z').toISOString().slice(0,10) !== date) throw new Error('Ühe kalendrikirje kuupäev ei sobi.');
           const confirmed = ['kinnitatud', 'confirmed', 'approved'].includes(String(item.status || '').toLowerCase());
           const room = rooms.find(room => room.id === item.roomId);
-          return { roomId: room.id, roomName: room.name, date,
+          const occupancyStartDate=String(item.occupancyStartDate||item.reservedStartDate||date);
+          const occupancyEndDate=String(item.occupancyEndDate||item.reservedEndDate||item.endDate||date);
+          const occupancyStartTime=String(item.occupancyStartTime||item.reservedStartTime||item.startTime||'');
+          const occupancyEndTime=String(item.occupancyEndTime||item.reservedEndTime||item.endTime||'');
+          const occupancyExact=!!(occupancyStartTime&&occupancyEndTime&&(item.occupancyStartDate||item.reservedStartDate)&&(item.occupancyEndDate||item.reservedEndDate));
+          return { roomId: room.id, roomName: room.name, date, endDate:String(item.endDate||date), occupancyStartDate,occupancyStartTime,occupancyEndDate,occupancyEndTime,occupancyExact,
             publicEvent: item.publicEvent === true, type: String(item.type || '').toLowerCase(),
             startTime: String(item.startTime || ''), endTime: String(item.endTime || ''),
             status: confirmed ? 'confirmed' : 'pending',
@@ -203,7 +207,15 @@
         });
     }
     function snapshotDay(snapshot, date, roomId = '') {
-      return snapshot.filter(entry => entry.date === date && (!roomId || entry.roomId === roomId))
+      return snapshot.filter(entry => entry.occupancyStartDate <= date && entry.occupancyEndDate >= date && (!roomId || entry.roomId === roomId))
+        .map(entry=>({...entry,date,bookingDate:entry.date,
+          startTime:date===entry.occupancyStartDate?entry.occupancyStartTime:'00:00',
+          endTime:date===entry.occupancyEndDate?entry.occupancyEndTime:'24:00',
+          useStartTime:date===entry.date?entry.startTime:'',
+          useEndTime:date===(entry.endDate||entry.date)?entry.endTime:'',
+          title:date>=entry.date&&date<=(entry.endDate||entry.date)?entry.title:'Ruum kasutuses',
+          publicEvent:date>=entry.date&&date<=(entry.endDate||entry.date)&&entry.publicEvent
+        }))
         .sort((a, b) => a.startTime.localeCompare(b.startTime));
     }
     function calendarDayAvailability(date, roomId = '') {
