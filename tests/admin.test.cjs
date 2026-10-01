@@ -1,19 +1,31 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert/strict'),crypto=require('crypto');
-const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8'),scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
+const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8'),admin=fs.readFileSync(require('path').join(__dirname,'../house-admin.js'),'utf8'),scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean);
 const context={console,crypto:crypto.webcrypto,Intl,Date,URLSearchParams,TextEncoder,Uint8Array,window:{addEventListener(){}},document:{getElementById:()=>null}};vm.createContext(context);
 vm.runInContext(scripts[0],context);vm.runInContext(fs.readFileSync(require('path').join(__dirname,'../konguta-admin.js'),'utf8'),context);
 const run=s=>vm.runInContext(s,context);let n=0;function check(name,fn){fn();n++;console.log('PASS '+name)}
 check('48 weekly Mondays for complete September–July season, same wall-clock dates across DST',()=>{const d=context.kBuildDates('2027-09-01','2028-07-31',1,[],true,'2027-09-01');assert.equal(d.dates.length,48);assert.equal(d.dates[0],'2027-09-06');assert.equal(d.dates.at(-1),'2028-07-31');assert.equal(d.dates.every(d=>context.kIsoWeekday(d)===1),true)});
+check('Multi-day booking quote uses both dates and times',()=>{const fields={bookDate:{value:'2026-10-01'},bookEndDate:{value:'2026-10-02'},startTime:{value:'18:00'},endTime:{value:'22:00'},clientType:{value:'community'},bookRoom:{value:'konguta-saal'},serviceSound:{checked:false},serviceLights:{checked:false},serviceTechnician:{checked:false}};context.document.getElementById=id=>fields[id]||null;const q=run('getQuote()');assert.equal(q.valid,true);assert.equal(q.hours,28);assert.equal(q.roomCost,560);fields.bookEndDate.value='2026-09-30';assert.equal(run('bookingDuration()').valid,false)});
 check('Current season skips past days and explicit holiday exceptions',()=>{const d=context.kBuildDates('2026-09-01','2027-07-31',4,['2026-12-24','2026-12-31'],false,'2026-09-27');assert.equal(d.skippedPast.length,4);assert.equal(d.dates.includes('2026-12-24'),false);assert.equal(d.dates[0],'2026-10-01')});
 check('Invalid range and empty selection are blocked',()=>{assert.throws(()=>context.kBuildDates('2026-02-30','2026-03-05',1),/Kontrolli/);assert.throws(()=>context.kBuildDates('2026-09-01','2028-09-01',1),/hooaja/)});
 check('Text quick entry parses collective, Estonian weekday, times and season',()=>{context.groups=[{id:'kavalik',name:'Segarühm Kavalik'}];const d=run("kExtractSchedule('Kavalik neljapäeviti 19.30–21.30, hooaeg 2026/27. Välja arvatud 24.12.2026.',groups,'2026-09-27')");assert.equal(d.collectiveId,'kavalik');assert.equal(d.weekday,4);assert.equal(d.startTime,'19:30');assert.equal(d.endDate,'2027-07-31');assert.equal(d.excludedDates[0],'2026-12-24')});
 check('Missing times are not invented',()=>{const d=run("kExtractSchedule('Kavalik hooajaks 2026/27',groups,'2026-09-27')");assert.equal(d.endTime,undefined);assert.match(d.question,/lõpuaeg/)});
+check('All public booking forms expose and submit an end date',()=>{for(const file of ['index.html','test.html','rongu.html','valguta.html']){const source=fs.readFileSync(require('path').join(__dirname,'..',file),'utf8');assert.ok(source.includes('id="bookEndDate"'),file);assert.ok(source.includes("endDate:$('bookEndDate')?.value||$('bookDate').value"),file)}});
 check('All new public content elements exist and module loads before startup',()=>{for(const id of ['homeTitle','homeDescription','homeNote','communityTitle','communityDescription','activitiesDescription','contactAddress','contactEmail','contactPhone','bookingConfirmationHint','eventBookingHint'])assert.ok(html.includes('id="'+id+'"'),id);assert.ok(html.indexOf('src="konguta-admin.js')<html.indexOf("$('eventDate').value=etDate();eventCalendarMonth=etDate().slice(0,7);bookingCalendarMonth="))});
 for(const s of scripts)new vm.Script(s);console.log(`${n} frontend checks passed.`);
 
 check('Public event list excludes rehearsals, private bookings and pending events; calendar keeps all uses',()=>{
  const source=[{type:'Proov',publicEvent:true,publicTitle:'Kooriproov'},{type:'Sündmus',publicEvent:true,publicTitle:'Kontsert'},{type:'broneering',publicEvent:false,publicTitle:'Salajane sünnipäev'},{type:'Sündmus',publicEvent:true,status:'ootel',publicTitle:'Ootel üritus'}].map(x=>({roomId:'konguta-saal',date:'2027-10-01',startTime:'18:00',endTime:'20:00',status:'kinnitatud',...x}));
  const snapshot=context.publicCalendarUsages(source);assert.equal(snapshot.length,4);assert.equal(context.snapshotDay(snapshot,'2027-10-01').length,4);const events=context.upcomingPublicEvents(snapshot,'2027-09-28');assert.equal(events.length,1);assert.equal(events[0].title,'Kontsert');assert.equal(snapshot[2].title,'Ruum kasutuses');
+});
+check('Occupancy dates include preparation before events and cleanup after midnight',()=>{
+ const snapshot=context.publicCalendarUsages([{roomId:'konguta-saal',date:'2026-10-12',endDate:'2026-10-13',startTime:'18:00',endTime:'01:00',occupancyStartDate:'2026-10-12',occupancyStartTime:'15:00',occupancyEndDate:'2026-10-13',occupancyEndTime:'11:00',status:'kinnitatud',publicEvent:false}]);
+ const before=context.snapshotDay(snapshot,'2026-10-12','konguta-saal'),after=context.snapshotDay(snapshot,'2026-10-13','konguta-saal');
+ assert.equal(before.length,1);assert.equal(before[0].startTime,'15:00');assert.equal(before[0].endTime,'24:00');
+ assert.equal(after.length,1);assert.equal(after[0].startTime,'00:00');assert.equal(after[0].endTime,'11:00');
+ assert.equal(context.roomAvailability(before,'konguta-saal').code,'partial');
+});
+check('House admin exposes standalone occupancy, selected rooms and configurable whole-house scope',()=>{
+ new vm.Script(admin);assert.ok(admin.includes("function kOpenOccupancy(bookingId='',initialDate=etDate())"));assert.ok(admin.includes("scope==='rooms'"));assert.ok(admin.includes('occupancyRoomIds'));assert.ok(admin.includes('kEditOccupancyStartDate'));
 });
 check('Mobile menu ends with culture screen and keeps staff access in header',()=>{const nav=html.match(/<nav class="mobile-nav"[\s\S]*?<\/nav>/)[0];assert.ok(nav.indexOf('Huviringid')<nav.indexOf('Kultuuriekraan'));assert.ok(!nav.includes('Töötajale'));assert.ok(html.includes('mobile-staff'));});
 check('Back follows actual internal history and preserves in-memory booking fields',()=>{
