@@ -111,12 +111,13 @@
     const etDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Tallinn',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const viewNames=['home','events','booking','activities','rooms','contact','login'];
     let activeView='home';
-    function routeView(hash=location.hash){const name=hash.replace(/^#/,'');return viewNames.includes(name)?name:'home';}
+    const VIEW_STORAGE_KEY='culturehub:last-view:'+location.pathname;
+    function routeView(hash=location.hash){let name=String(hash||'').replace(/^#/,'');if(!viewNames.includes(name)){try{name=sessionStorage.getItem(VIEW_STORAGE_KEY)||'';}catch(e){name='';}}if(!viewNames.includes(name))name='home';return name;}
     function showView(name,fromHistory=false){
       if(!viewNames.includes(name))name='home';
       const previous=activeView;
       if(!fromHistory&&name!==previous)history.pushState({kongutaView:name,from:previous},'', '#'+name);
-      activeView=name;
+      activeView=name;try{sessionStorage.setItem(VIEW_STORAGE_KEY,name);}catch(e){}
       document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
       $('view-'+name)?.classList.add('active');
       document.querySelectorAll('[data-view]').forEach(x=>{x.classList.toggle('active',x.dataset.view===name);if(x.dataset.view===name)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current');});
