@@ -361,6 +361,7 @@ async function kReloadStaff(){
 }
 logout=async function(){kWorkspace=null;kWorkspaceRequest=null;kSchedulePending=null;kEditPending=null;kClearWorkspaceCache(true);$('adminCalendarEntryPanel').classList.add('hidden');await kLegacy.logout();};
 function kRenderStaff(){
+  $('staffPanel').parentElement.style.maxWidth='none';
   const tabs=[['calendar','Kalender'],['collectives',manager()?'Kollektiivid':'Minu kollektiivid'],...(manager()?[['ideas','Ideed'],['import','AI import'],['settings','Sisu ja hinnad'],['users',staffUser?.role==='platform_admin'?'Kasutajad':'Juhendajate kontod']]:[]),['activity','Muudatused']];
   if(!tabs.some(([id])=>id===kStaffTab))kStaffTab='calendar';
   $('staffContent').innerHTML=`<div class="panel-header"><p class="hint" style="margin:0">${manager()?`Juhataja töölaud · ${esc(HOUSE.name)}`:'Kollektiivijuhi töölaud · enda kollektiivid ja proovid'}</p><button class="button outline small" type="button" onclick="kReloadStaff()">Uuenda andmeid</button></div>${manager()?kOrganizationSummaryHTML():kLeaderQuickHTML()}<nav class="k-tabs" aria-label="Siseveebi vaated">${tabs.map(([id,label])=>`<button class="button ${id===kStaffTab?'':'outline'} small" aria-current="${id===kStaffTab?'page':'false'}" onclick="kSwitchStaff('${id}')">${label}</button>`).join('')}</nav><div id="kStaffSection"></div>`;
