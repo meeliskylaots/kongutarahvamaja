@@ -278,8 +278,9 @@ async function kLoadWorkspaceSection(section,force=false){
   })();
   try{return await kSectionRequests[sectionKey]}finally{delete kSectionRequests[sectionKey]}
 }
+function kWorkspaceSectionIsActive(section){return (kStaffTab==='calendar'&&section==='bookings')||kStaffTab===section;}
 async function kEnsureWorkspaceSection(section,force=false){
-  const active=(kStaffTab==='calendar'&&section==='bookings')||kStaffTab===section;
+  const active=kWorkspaceSectionIsActive(section);
   const root=active?$('kStaffSection'):null;
   const labels={bookings:'Laadin kalendri kokkuvõtet…',ideas:'Laadin ideepanka…',users:'Laadin kasutajaid…',activity:'Laadin muudatusi…'};
   const stop=root?kBeginTimedLoader(root,labels[section]||'Laadin andmeid…'):()=>{};
@@ -291,8 +292,9 @@ async function kEnsureWorkspaceSection(section,force=false){
   }catch(e){
     if(section==='contracts'&&kStaffTab==='calendar'&&$('kBookingList')){
       const count=$('kBookingCount');if(count)count.textContent='Lepingu olekut ei saanud praegu laadida. Broneeringute andmed on siiski nähtavad.';
-    }else if(kStaffTab===section&&$('kStaffSection')){
-      $('kStaffSection').innerHTML=`<p class="status-msg error">${esc(e.message||'Andmeid ei saanud laadida.')}</p><button class="button small" onclick="kEnsureWorkspaceSection('${section}',true)">Proovi uuesti</button>`;
+    }else if(kWorkspaceSectionIsActive(section)&&$('kStaffSection')){
+      const message=e?.message==='SERVER_UPDATE_REQUIRED'?'Siseveebi server vajab uuendamist.':(e?.message||`${section==='bookings'?'Kalendri kokkuvõtet':'Andmeid'} ei saanud laadida.`);
+      $('kStaffSection').innerHTML=`<p class="status-msg error">${esc(message)}</p><button class="button small" onclick="kEnsureWorkspaceSection('${section}',true)">Proovi uuesti</button>`;
     }
   } finally { stop(); }
 }
