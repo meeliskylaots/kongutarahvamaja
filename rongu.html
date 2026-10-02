@@ -545,7 +545,7 @@
       if(mode==='upcoming'){target.innerHTML=entries.map(renderUpcomingEvent).join('');return}
       target.innerHTML=entries.map(e=>{const d=new Date(e.date+'T12:00:00');return '<article class="event-card"><div class="date-block"><b>'+d.getDate()+'</b><small>'+new Intl.DateTimeFormat('et-EE',{month:'short'}).format(d).replace('.','').toUpperCase()+'</small></div><div><h3>'+esc(e.title||'Ruum kasutuses')+'</h3><p>'+new Intl.DateTimeFormat('et-EE',{day:'numeric',month:'long'}).format(d)+' · '+esc(e.startTime||'')+'–'+esc(e.endTime||'')+' · '+esc(e.roomName||rooms.find(r=>r.id===e.roomId)?.name||'Rahvamaja')+'</p></div></article>'}).join('')
     }
-    function upcomingPublicEvents(snapshot,today){return snapshot.filter(e=>e.date>=today&&e.status==='confirmed'&&e.publicEvent===true).sort((a,b)=>(a.date+' '+a.startTime).localeCompare(b.date+' '+b.startTime));}
+    function upcomingPublicEvents(snapshot,today){return snapshot.filter(e=>e.date>=today&&e.status==='confirmed'&&e.publicEvent===true&&!['proov','trial','rehearsal','collective','huviring','ring','treening'].includes(String(e.type||'').trim().toLowerCase())).sort((a,b)=>(a.date+' '+a.startTime).localeCompare(b.date+' '+b.startTime));}
     function renderRegularActivities(){const root=$('regularActivities');if(!root)return;root.innerHTML=(siteSettings.activities||[]).map(c=>`<article class="regular-row"><strong>${esc(c.name)}</strong><p>${esc(c.schedule||'Aeg kokkuleppel')}</p><small>${esc(c.location||'')}</small></article>`).join('')||'<p>Regulaarsete tegevuste infot lisatakse peagi.</p>';}
     async function loadHomeEvents(){
       const today=etDate();$('todayDate').textContent=new Intl.DateTimeFormat('et-EE',{dateStyle:'full'}).format(new Date(today+'T12:00:00'));
