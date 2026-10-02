@@ -29,6 +29,17 @@ check('Whole-house events stay visible publicly and block availability for each 
  assert.equal(context.upcomingPublicEvents(snapshot,'2027-10-01')[0].title,'Rõngu Pasunakoor 155!');
  assert.equal(context.snapshotDay(snapshot,date,roomId).length,1);
 });
+check('Whole-house reservation marks the calendar red without hiding genuinely free hours',()=>{
+ const state=run("calendarSnapshot=publicCalendarUsages([{id:'JR-1',roomId:'__whole_house__:rongu',roomName:'Kogu maja',date:'2027-10-10',startTime:'18:00',endTime:'21:00',occupancyStartDate:'2027-10-10',occupancyStartTime:'15:00',occupancyEndDate:'2027-10-10',occupancyEndTime:'22:00',status:'kinnitatud',publicEvent:true,type:'Sündmus',publicTitle:'Rõngu Pasunakoor 155!'}]);calendarDayAvailability('2027-10-10','konguta-saal')");
+ assert.equal(state.code,'full');assert.equal(state.wholeHouseBusy,true);assert.ok(state.free.length>0);
+});
+check('Event cards open a detail dialog with booking description and links',()=>{
+ const detail={innerHTML:''},dialog={opened:false,showModal(){this.opened=true}};
+ context.document.getElementById=id=>id==='publicEventDetail'?detail:id==='publicEventDialog'?dialog:null;
+ run("calendarSnapshot=publicCalendarUsages([{id:'JR-DETAIL',roomId:'__whole_house__:rongu',roomName:'Kogu maja',date:'2027-10-10',startTime:'18:00',endTime:'21:00',occupancyStartDate:'2027-10-10',occupancyStartTime:'15:00',occupancyEndDate:'2027-10-10',occupancyEndTime:'22:00',status:'kinnitatud',publicEvent:true,type:'Sündmus',publicTitle:'Rõngu Pasunakoor 155!',publicDescription:'Pidulik kontsert',ticketUrl:'https://example.test/pilet'}]);openPublicEventById('JR-DETAIL')");
+ assert.equal(dialog.opened,true);assert.match(detail.innerHTML,/Pidulik kontsert/);assert.match(detail.innerHTML,/Osta pilet/);
+ for(const file of ['index.html','test.html','rongu.html','valguta.html']){const page=fs.readFileSync(require('path').join(__dirname,'..',file),'utf8');assert.ok(page.includes('onclick="openPublicEventById(this.dataset.eventId)"'),file);assert.ok(page.includes('id="publicEventDialog"'),file);assert.ok(page.includes("startsWith('__whole_house__:')"),file);}
+});
 check('Every house event feed keeps rehearsals out of public events',()=>{for(const file of ['index.html','test.html','rongu.html','valguta.html']){const page=fs.readFileSync(require('path').join(__dirname,'..',file),'utf8');assert.ok(page.includes("e.publicEvent===true&&!['proov','trial'"),file);}});
 check('Occupancy dates include preparation before events and cleanup after midnight',()=>{
  const snapshot=context.publicCalendarUsages([{roomId:'konguta-saal',date:'2026-10-12',endDate:'2026-10-13',startTime:'18:00',endTime:'01:00',occupancyStartDate:'2026-10-12',occupancyStartTime:'15:00',occupancyEndDate:'2026-10-13',occupancyEndTime:'11:00',status:'kinnitatud',publicEvent:false}]);
