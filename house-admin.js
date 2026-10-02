@@ -288,7 +288,7 @@ async function kEnsureWorkspaceSection(section,force=false){
     await kLoadWorkspaceSection(section,force);
     if(!$('view-login')?.classList.contains('active'))return;
     if(section==='contracts'&&kStaffTab==='calendar'&&$('kBookingList'))kRenderBookings();
-    else if(kStaffTab===section)kRenderStaff();
+    else if(kWorkspaceSectionIsActive(section))kRenderStaff();
   }catch(e){
     if(section==='contracts'&&kStaffTab==='calendar'&&$('kBookingList')){
       const count=$('kBookingCount');if(count)count.textContent='Lepingu olekut ei saanud praegu laadida. Broneeringute andmed on siiski nähtavad.';
