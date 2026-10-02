@@ -262,7 +262,8 @@
     }
     function publicCalendarUsages(usages) {
       if (!Array.isArray(usages)) throw new Error('Kalendriandmed puuduvad.');
-      return usages.filter(item => rooms.some(room => room.id === item.roomId))
+      const isWholeHouse=item=>String(item.roomId||'').startsWith('__whole_house__:');
+      return usages.filter(item => isWholeHouse(item)||rooms.some(room => room.id === item.roomId))
         .filter(item => !['tühistatud', 'tuhistatud', 'cancelled', 'canceled', 'rejected'].includes(String(item.status || '').toLowerCase()))
         .map(item => {
           const date = String(item.date || item.dateISO || '');
@@ -274,7 +275,7 @@
           const occupancyStartTime=String(item.occupancyStartTime||item.reservedStartTime||item.startTime||'');
           const occupancyEndTime=String(item.occupancyEndTime||item.reservedEndTime||item.endTime||'');
           const occupancyExact=!!(occupancyStartTime&&occupancyEndTime&&(item.occupancyStartDate||item.reservedStartDate)&&(item.occupancyEndDate||item.reservedEndDate));
-          return { roomId: room.id, roomName: room.name, date, endDate:String(item.endDate||date), occupancyStartDate,occupancyStartTime,occupancyEndDate,occupancyEndTime,occupancyExact,
+          return { roomId: item.roomId, roomName: room?.name||item.roomName||'Kogu maja', date, endDate:String(item.endDate||date), occupancyStartDate,occupancyStartTime,occupancyEndDate,occupancyEndTime,occupancyExact,
             publicEvent: item.publicEvent === true, type: String(item.type || '').toLowerCase(),
             startTime: String(item.startTime || ''), endTime: String(item.endTime || ''),
             status: confirmed ? 'confirmed' : 'pending',
@@ -282,7 +283,7 @@
         });
     }
     function snapshotDay(snapshot, date, roomId = '') {
-      return snapshot.filter(entry => entry.occupancyStartDate <= date && entry.occupancyEndDate >= date && (!roomId || entry.roomId === roomId))
+      return snapshot.filter(entry => entry.occupancyStartDate <= date && entry.occupancyEndDate >= date && (!roomId || entry.roomId === roomId || String(entry.roomId||'').startsWith('__whole_house__:')))
         .map(entry=>({...entry,date,bookingDate:entry.date,
           startTime:date===entry.occupancyStartDate?entry.occupancyStartTime:'00:00',
           endTime:date===entry.occupancyEndDate?entry.occupancyEndTime:'24:00',
@@ -657,4 +658,3 @@
   </script>
 </body>
 </html>
-
