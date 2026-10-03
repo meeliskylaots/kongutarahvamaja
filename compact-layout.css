@@ -24,6 +24,9 @@
 .calendar-day{aspect-ratio:auto;min-height:54px;height:54px}
 .calendar-nav{margin-bottom:10px}.booking-extra{margin:10px 0;padding:6px 0}
 .field{margin-bottom:11px}.field input,.field select,.field textarea{font-size:16px}
+.booking-datetime{grid-template-columns:1fr}
+.booking-datetime>.field{display:grid;grid-template-columns:50px minmax(0,1fr);align-items:center;gap:8px}
+.booking-datetime>.field>span{margin:0}
 .events-page{padding-bottom:32px}.events-heading{display:none}
 .events-list-section{max-width:none}.public-event-card{grid-template-columns:120px minmax(0,1fr)}
 .public-event-visual{min-height:140px;padding:14px}.public-event-body{padding:18px}
@@ -67,4 +70,5 @@
   .home-about .info-card .row-actions,.home-about .info-card>.button{margin:0!important}
   .footer{padding:22px 0 110px}.calendar-day{height:54px}
 }
-@media(max-width:540px){.topbar-inner{height:auto}.page-head p{font-size:14px}}
+@media(max-width:540px){.topbar-inner{height:auto}.page-head p{font-size:14px}.booking-datetime>.field{display:block}.booking-datetime>.field>span{margin-bottom:6px}}
+@media(max-width:390px){.booking-datetime .datetime-controls{grid-template-columns:1fr}}
