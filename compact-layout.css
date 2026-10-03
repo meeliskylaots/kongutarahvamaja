@@ -1,0 +1,70 @@
+/* Shared scale for the public pages and staff workspace. */
+.topbar-inner{height:62px;gap:16px}
+.brand-mark{width:36px;height:36px;border-radius:11px;flex:none;font-size:16px}
+.brand-copy strong{font-size:14px}.brand-copy small{margin-top:3px}
+.nav{gap:18px}.nav .staff-button{border-radius:10px;padding:8px 12px;white-space:nowrap}
+.nav .external-nav{max-width:115px;font-size:12px;line-height:1.3}
+.page-head{padding:24px 0 18px}.page-head h1{font-size:clamp(27px,3vw,34px);margin:8px 0 10px;line-height:1.15}
+.page-head p{font-size:15px;line-height:1.5;margin-bottom:0;max-width:720px}
+.page-head>.eyebrow{display:none}
+.hero{padding:28px 0;gap:32px;grid-template-columns:1.3fr .7fr}
+.hero h1{font-size:clamp(32px,3.8vw,46px);margin:12px 0;line-height:1.1}
+.hero-copy{font-size:16px;max-width:560px;margin-bottom:0}
+.hero-art{height:240px;border-radius:20px}
+.hero-art .house{transform:translateX(-50%) scale(.72);transform-origin:bottom center;bottom:42px}
+.hero-art .hill{bottom:20px}.hero-art .hill.two{bottom:0}
+.hero-note{display:none}.hero .actions{margin:18px 0 0}
+.section{padding:28px 0}.section-head{margin-bottom:16px}
+.section-head h2{font-size:26px;margin:0}.section-head .eyebrow{display:none}
+.section-head p{margin-top:5px}.quick-links{margin-bottom:24px}
+.button{min-height:44px;padding:0 16px}.form-card,.panel{padding:18px}
+.form-card h2,.panel h2{font-size:18px;margin-bottom:12px}
+.two-col{gap:20px;padding-bottom:32px}.back-button{margin-top:8px;font-size:13px}
+.back-button+.page-head{padding-top:4px}
+.calendar-day{aspect-ratio:auto;min-height:54px;height:54px}
+.calendar-nav{margin-bottom:10px}.booking-extra{margin:10px 0;padding:6px 0}
+.field{margin-bottom:11px}.field input,.field select,.field textarea{font-size:16px}
+.events-page{padding-bottom:32px}.events-heading{display:none}
+.events-list-section{max-width:none}.public-event-card{grid-template-columns:120px minmax(0,1fr)}
+.public-event-visual{min-height:140px;padding:14px}.public-event-body{padding:18px}
+.public-event-body h3{font-size:22px}.public-event-description{margin-top:10px}
+.public-event-card:not(:has(.public-event-visual[style*="background-image"])){grid-template-columns:100px minmax(0,1fr)}
+.public-event-card:not(:has(.public-event-visual[style*="background-image"])) .public-event-visual{background:var(--mint);min-height:0;align-items:center;justify-content:center;padding:10px}
+.card-photo:not([style*="background-image"]){display:none}
+.collective-card .card-photo,.room-card .card-photo{height:140px;aspect-ratio:auto}
+.card-body{padding:16px}.collective-grid,.room-grid{align-items:start}
+#view-activities .collective-grid{padding-bottom:28px}
+#homeEvents{align-items:start;grid-template-columns:minmax(0,1fr) minmax(0,2fr)}
+#homeEvents>.empty-card{padding:6px 0;border:0;background:transparent;box-shadow:none}
+.home-next{grid-column:auto}.home-next h3{margin-bottom:8px}
+.home-about .info-band{display:block}.home-about .info-band>div:first-child{display:none}
+.home-about .info-card{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;padding:16px 20px;background:var(--mint);color:var(--ink);box-shadow:none}
+.home-about .info-card strong{font-size:16px}.home-about .info-card p{display:none}
+.home-about .info-card .row-actions{margin:0 0 0 auto!important}
+.home-about .info-card>.button{margin:0 0 0 auto!important}
+.footer{padding:22px 0}.footer p{margin:5px 0 0}
+#view-login:has(#staffPanel:not(.hidden)) .page-head{display:none}
+#view-login:has(#staffPanel:not(.hidden))>.shell{padding-top:20px}
+#view-login:has(#staffPanel:not(.hidden))>.shell>.form-card{margin-bottom:28px!important}
+.k-tabs{margin:12px 0}.k-tabs button{min-height:38px}
+.idea-explanation{align-self:start;padding:12px 16px}
+.idea-explanation summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;gap:8px}
+.idea-explanation summary::before{content:'＋';color:var(--teal)}
+.idea-explanation[open] summary::before{content:'−'}
+.idea-explanation p{font-size:14px;margin:8px 0}
+@media(min-width:761px) and (max-width:1100px){.topbar-inner{gap:12px}.footer{padding-bottom:100px}}
+@media(max-width:760px){
+  .topbar-inner{height:62px}.page-head{padding:20px 0 16px}
+  .page-head h1{font-size:28px}.hero{grid-template-columns:1fr}
+  #view-home .hero{padding:22px 0}#view-home .hero h1{font-size:32px}
+  .section{padding:24px 0}.section-head{gap:12px;flex-wrap:wrap}.section-head h2{font-size:24px}
+  .form-card,.panel{padding:16px}.public-event-body h3{font-size:20px}
+  .public-event-card{grid-template-columns:1fr}.public-event-visual{min-height:150px}
+  .public-event-card:not(:has(.public-event-visual[style*="background-image"])){grid-template-columns:78px minmax(0,1fr)}
+  .public-event-date{min-width:58px;padding:8px}.public-event-date strong{font-size:24px}
+  #homeEvents{grid-template-columns:1fr;gap:12px}
+  #view-home .home-about{padding:20px 0}.home-about .info-card{gap:10px}
+  .home-about .info-card .row-actions,.home-about .info-card>.button{margin:0!important}
+  .footer{padding:22px 0 110px}.calendar-day{height:54px}
+}
+@media(max-width:540px){.topbar-inner{height:auto}.page-head p{font-size:14px}}
