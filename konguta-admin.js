@@ -45,21 +45,22 @@ function kApplyPublic(){
   $('submitBookingBtn').textContent='Broneeri ruum';
   $('bookingConfirmationHint').textContent='Vaba aeg kinnitatakse kohe pärast kalendri ja 60-minutilise puhvri kontrolli. Kinnituse saad e-postile. Kontaktandmed jäävad rahvamajale.';
   if($('eventBookingHint'))$('eventBookingHint').textContent='Vali sobiv aeg ja broneeri ruum. Süsteem kontrollib vaba aega ning kasutuste vahele jäävat puhvrit.';
+  const pricedServices=syncBookingServices(kSite.prices);
+  const serviceDisclosure=document.querySelector('#bookingForm .service-options')?.closest('details');
+  if(serviceDisclosure)serviceDisclosure.open=pricedServices.length>0;
   updateQuote();renderBookingRoomInfo();renderBookingCalendar();
   document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel'))el.textContent=`Valitud ruumi saadavus kell 08.00–23.00 koos puhvriga. Saali vaba vahemik peab olema vähemalt ${kMinimumHours()} tundi.`;});
 }
 getQuote=function(){
   if(!kSite)return kLegacy.getQuote();
   const p=kSite.prices,community=$('clientType').value==='community',outdoor=$('bookRoom').value==='konguta-valiala',start=$('startTime').value,end=$('endTime').value;
-  const valid=!!(start&&end&&min(end)>min(start)),hours=valid?Math.ceil((min(end)-min(start))/60):0,hourly=community?p.community:p.commercial;
+  const duration=bookingDuration(),valid=duration.valid,hours=valid?Math.ceil(duration.hours):0,hourly=community?p.community:p.commercial;
   const roomCost=outdoor?0:hours*hourly,selected=[];
-  if($('serviceSound').checked)selected.push({label:'Helitehnika',total:p.sound});
-  if($('serviceLights').checked)selected.push({label:'Valgustus',total:p.lights});
-  if($('serviceTechnician').checked)selected.push({label:'Tehniline tugi',total:Math.max(p.technicianMinimum,hours)*(community?p.technicianCommunity:p.technicianCommercial)});
+  for(const service of pricedBookingServices(p,community,hours))if($(service.inputId)?.checked)selected.push({label:service.label,total:service.total});
   const servicesTotal=selected.reduce((a,x)=>a+x.total,0);return{valid,hours,hourly,community,outdoor,roomCost,selected,servicesTotal,total:roomCost+servicesTotal};
 };
 updateQuote=function(){
-  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices,q=getQuote();
+  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices;syncBookingServices(p);const q=getQuote();
   $('communityRateCard').querySelector('strong').textContent=`Kogukonnasõbralik kasutus ${kMoney(p.community)} €/h`;
   $('commercialRateCard').querySelector('strong').textContent=`Kommertskasutus ${kMoney(p.commercial)} €/h`;
   $('communityRateCard').classList.toggle('selected',q.community);$('commercialRateCard').classList.toggle('selected',!q.community);

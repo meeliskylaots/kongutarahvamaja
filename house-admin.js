@@ -146,12 +146,9 @@ function kApplyPublic(){
     const typeField=$('clientType')?.closest('.field');if(typeField)typeField.style.display='none';
     const rateCard=$('communityRateCard')?.closest('.rate-card');if(rateCard){const grid=rateCard.querySelector('.rate-grid');if(grid)grid.style.display='none';const h=rateCard.querySelector('h3');if(h)h.textContent='Ruumirendi hind';const note=rateCard.querySelector('.quote-note');if(note)note.textContent=HOUSE.feeNote||'Hind sõltub valitud ruumist.';}
   }
-  if(HOUSE.servicesMode==='request'){
-    document.querySelectorAll('.service-options input').forEach(i=>{i.checked=false;i.disabled=true;});
-    const options=document.querySelector('.service-options');if(options)options.style.display='none';
-    const heading=[...document.querySelectorAll('#bookingForm h2')].find(x=>x.textContent.includes('Lisateenused'));if(heading)heading.textContent='Tehnika ja lisavajadused';
-    const hint=heading?.nextElementSibling;if(hint?.classList.contains('hint'))hint.textContent='Heli-, valgus- ja muud tehnilised vajadused kirjelda allpool. Rahvamaja täpsustab lahenduse ja hinna eraldi.';
-  }
+  const pricedServices=syncBookingServices(kSite.prices);
+  const serviceDisclosure=document.querySelector('#bookingForm .service-options')?.closest('details');
+  if(serviceDisclosure)serviceDisclosure.open=pricedServices.length>0;
   updateQuote();renderBookingRoomInfo();renderBookingCalendar();
   document.querySelectorAll('.calendar-explanation').forEach(el=>{if(el.closest('.booking-calendar-panel')){const room=rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();const minHours=(room?.minimumMinutes||kMinimumHours()*60)/60;el.textContent=`${room?.name||'Ruumi'} saadavus kell ${HOUSE.calendar.dayStart}–${HOUSE.calendar.dayEnd} koos puhvriga.${minHours>0?' Vaba vahemik peab olema vähemalt '+minHours+' tundi.':''}`;}});
 }
@@ -167,9 +164,7 @@ getQuote=function(){
   const valid=Number.isFinite(startMs)&&Number.isFinite(endMs)&&endMs>startMs;
   const hours=valid?Math.ceil((endMs-startMs)/3600000):0;
   const roomCost=outdoor?0:hours*hourly,selected=[];
-  if($('serviceSound').checked)selected.push({label:'Helitehnika',total:p.sound});
-  if($('serviceLights').checked)selected.push({label:'Valgustus',total:p.lights});
-  if($('serviceTechnician').checked)selected.push({label:'Tehniline tugi',total:Math.max(p.technicianMinimum,hours)*(community?p.technicianCommunity:p.technicianCommercial)});
+  for(const service of pricedBookingServices(p,community,hours))if($(service.inputId)?.checked)selected.push({label:service.label,total:service.total});
   const servicesTotal=selected.reduce((a,x)=>a+x.total,0);return{valid,hours,hourly,community,outdoor,room,roomCost,selected,servicesTotal,total:roomCost+servicesTotal};
 };
 checkAvailability=function(entries=bookingDayEntries){
@@ -190,7 +185,7 @@ checkAvailability=function(entries=bookingDayEntries){
   else{status.textContent='Aeg on esialgu vaba. Ruumi hõivatus algab '+clock(proposedStart)+' ja lõpeb '+clock(proposedEnd)+'.';status.classList.remove('error');daily.textContent='Valitud aeg sobib. Kattuvusi kontrollitakse uuesti enne salvestamist.';daily.classList.remove('error');button.disabled=false;}
 };
 updateQuote=function(){
-  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices,q=getQuote(),room=q.room||rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();
+  if(!kSite)return kLegacy.updateQuote();const p=kSite.prices;syncBookingServices(p);const q=getQuote(),room=q.room||rooms.find(r=>r.id===$('bookRoom').value)||kPrimaryRoom();
   const communityRate=Number.isFinite(room?.pricing?.community)?room.pricing.community:(room?.id===kPrimaryRoom()?.id?p.community:null);
   const commercialRate=Number.isFinite(room?.pricing?.commercial)?room.pricing.commercial:(room?.id===kPrimaryRoom()?.id?p.commercial:null);
   $('communityRateCard').querySelector('strong').textContent=`Kogukonnasõbralik kasutus ${Number.isFinite(communityRate)?kMoney(communityRate)+' €/h':'kokkuleppel'}`;
@@ -199,7 +194,7 @@ updateQuote=function(){
   $('serviceSound').closest('label').querySelector('b').textContent=kMoney(p.sound)+' € / üritus';
   $('serviceLights').closest('label').querySelector('b').textContent=kMoney(p.lights)+' € / üritus';
   $('technicianRate').textContent=`${kMoney(q.community?p.technicianCommunity:p.technicianCommercial)} € / h, vähemalt ${p.technicianMinimum} h`;
-  $('quoteBox').innerHTML=`<h3>Hinna arvestus</h3><div class="quote-row"><span>Ruumirent ${q.outdoor?'':`${kMoney(q.hourly)} €/h × ${q.hours} h`}</span><strong>${q.outdoor?'Kokkuleppel':q.valid?euro(q.roomCost):'—'}</strong></div>${q.selected.map(x=>`<div class="quote-row"><span>${esc(x.label)}</span><strong>${euro(x.total)}</strong></div>`).join('')}<div class="quote-row quote-total"><span>${HOUSE.publicBookingMode==='instant'?'Kokku':'Hinnanguline ruumirent'}</span><strong>${q.valid?euro(q.total):'—'}</strong></div><p class="quote-note">${q.outdoor?'Valitud ruumi hind lepitakse eraldi kokku. ':''}${HOUSE.servicesMode==='request'?'Tehnika ja muud lisavajadused hinnastab rahvamaja eraldi. ':''}Arvestus kehtiva hinnakirja järgi; erandid ja lõpliku summa kinnitab rahvamaja.</p>`;
+  $('quoteBox').innerHTML=`<h3>Hinna arvestus</h3><div class="quote-row"><span>Ruumirent ${q.outdoor?'':`${kMoney(q.hourly)} €/h × ${q.hours} h`}</span><strong>${q.outdoor?'Kokkuleppel':q.valid?euro(q.roomCost):'—'}</strong></div>${q.selected.map(x=>`<div class="quote-row"><span>${esc(x.label)}</span><strong>${euro(x.total)}</strong></div>`).join('')}<div class="quote-row quote-total"><span>${HOUSE.publicBookingMode==='instant'?'Kokku':'Hinnanguline summa'}</span><strong>${q.valid?euro(q.total):'—'}</strong></div><p class="quote-note">${q.outdoor?'Valitud ruumi hind lepitakse eraldi kokku. ':''}${HOUSE.servicesMode==='request'?'Hinnakirjata tehnika ja muud lisavajadused hinnastab rahvamaja eraldi. ':''}Arvestus kehtiva hinnakirja järgi; erandid ja lõpliku summa kinnitab rahvamaja.</p>`;
 };
 renderBookingRoomInfo=function(){
   if(!kSite)return kLegacy.renderBookingRoomInfo();
@@ -227,7 +222,7 @@ submitBooking=async function(ev){
       selectedServiceIds:[['serviceSound','sound'],['serviceLights','lights'],['serviceTechnician','technician']].filter(([id])=>$(id).checked).map(([,id])=>id),
       selectedServices:(q.selected||[]).map(x=>({label:x.label,total:Number(x.total)||0})),
       roomCost:Number(q.roomCost)||0,servicesTotal:Number(q.servicesTotal)||0,estimatedTotal:Number(q.total)||0,
-      quoteNote:[q.outdoor?'Valitud ruumi hind täpsustatakse eraldi.':'',HOUSE.servicesMode==='request'?'Tehnika ja muud lisavajadused hinnastab rahvamaja eraldi.':'','Broneerimisel kuvatud hinnainfo on esialgne; lõpliku hinna kinnitab rahvamaja.'].filter(Boolean).join(' ')
+      quoteNote:[q.outdoor?'Valitud ruumi hind täpsustatakse eraldi.':'',HOUSE.servicesMode==='request'?'Hinnakirjata tehnika ja muud lisavajadused hinnastab rahvamaja eraldi.':'','Broneerimisel kuvatud hinnainfo on esialgne; lõpliku hinna kinnitab rahvamaja.'].filter(Boolean).join(' ')
     });
     kNotice('bookingMessage',`${result.message} Broneeringu number: ${result.bookingId}. ${result.warning||''}`);
     $('bookingForm').reset();$('bookDate').value=etDate();if($('bookEndDate'))$('bookEndDate').value=etDate();bookingCalendarMonth=etDate().slice(0,7);await loadBookingSchedule(true)
